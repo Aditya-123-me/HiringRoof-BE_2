@@ -1,0 +1,710 @@
+const User = require("../models/user.model");
+const jwt = require("jsonwebtoken");
+const extractSkillSub = require("../util/functions");
+const { JWT_SECRET } = require("../config/config");
+const createNotification = require("../util/createNotification");
+const JobApplication = require("../models/jobApplication.model");
+const mongoose = require("mongoose");
+const { deleteFromFirebase, imageUpload } = require("../util/firebase.util");
+const { getVideoDurationInSeconds } = require("get-video-duration");
+const fs = require("fs");
+const jobModel = require("../models/job.model");
+const convertTo12HourFormat = require("../util/convertTo12HourFormat");
+
+const userController = {};
+
+userController.addRescheduleRequest = async (req, res) => {
+	try {
+		const { _id, newDate, newTime, reason, interviewType, requestedBy } = req.body;
+
+		if (!_id || !mongoose.Types.ObjectId.isValid(_id)) {
+			return res.status(400).json({ status: false, msg: "Invalid Job Application ID" });
+		}
+
+		const jobApplication = await JobApplication.findById(_id);
+		if (!jobApplication) {
+			return res.status(404).json({ status: false, msg: "Job Application not found" });
+		}
+
+		jobApplication.temp = {
+			newDate,
+			newTime: convertTo12HourFormat(newTime),
+			reason,
+			requestedBy,
+			interviewType,
+		};
+
+		await jobApplication.save();
+
+		return res.status(200).send({
+			status: true,
+			msg: " Interview reschedule request added successfully !!",
+		});
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+userController.login = async (req, res) => {
+	try {
+		const { phone } = req.body;
+		const startsWithPlus = /^\+/.test(phone);
+
+		if (phone.length < 10 || startsWithPlus)
+			return res.status(404).send({ status: false, msg: "Please provide a valid number !!" });
+		if (!phone) return res.status(404).send({ status: false, msg: "Please provide a number !!" });
+		const findNumber = await User.findOne({ phone });
+
+		const min = 100000;
+		const max = 999999;
+		const otp = Math.floor(Math.random() * (max - min + 1)) + min;
+
+		if (findNumber) {
+			await User.findByIdAndUpdate(findNumber._id, { otp }, { new: true });
+
+			if (findNumber.blocked_status)
+				return res.status(404).send({
+					status: false,
+					msg: "This account is disabled, please contact  the administrator.",
+					otp: 0,
+					firstTime: false,
+				});
+
+			return res.status(200).send({ status: true, otp, firstTime: false, msg: "Otp send successfully !!" });
+		} else {
+			await User.create({ phone, otp });
+			return res.status(200).send({ status: true, otp, firstTime: true, msg: "Otp send successfully !!" });
+		}
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.verify = async (req, res, io) => {
+	try {
+		const { phone, otp, userType } = req.body;
+		if (!phone || !otp) return res.status(404).send({ status: false, msg: "Please provide number & otp !!" });
+		const findNumber = await User.findOne({ phone, otp });
+		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone or OTP is wrong, Please try again !!" });
+
+		let update;
+		if (userType.trim())
+			update = await User.findByIdAndUpdate(
+				findNumber._id,
+				{ $set: { otp: "", userType, profileComplete: 10 } },
+				{ new: true }
+			);
+		else update = await User.findByIdAndUpdate(findNumber._id, { $set: { otp: "" } }, { new: true });
+
+		const token = jwt.sign({ _id: update._id }, JWT_SECRET, {
+			expiresIn: "60d",
+		});
+		if (userType.trim()) {
+			const data = await createNotification({
+				senderId: update._id,
+				receiverId: update._id,
+				title: `Welcome ${update.name}`,
+				desc: `Welcome !!`,
+				logo: "",
+			});
+			io.emit(`notifications_${data.receiverId._id}`, data);
+		} else {
+			const data = await createNotification({
+				senderId: update._id,
+				receiverId: update._id,
+				title: `Welcome ${update.name}`,
+				desc: `Welcome Back !!`,
+				logo: "",
+			});
+			io.emit(`notifications_${data.receiverId._id}`, data);
+		}
+
+		return res.status(200).send({
+			status: true,
+			userId: update._id,
+			phone: update.phone,
+			userType: update.userType,
+			userData: update,
+			token,
+			msg: "Login successfully !!",
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.delete = async (req, res) => {
+	try {
+		const { _id } = req.params;
+
+		const userRecord = await User.findOne({ _id });
+		if (!userRecord)
+			return res.status(404).send({
+				status: true,
+				msg: "Invalid User !!",
+			});
+
+		await User.deleteOne({ _id });
+
+		return res.status(200).send({
+			status: true,
+			msg: "User deleted successfully !!",
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.user = async (req, res) => {
+	try {
+		const { _id, phone } = req.query;
+
+		let userRecord;
+
+		if (_id) userRecord = await User.findOne({ _id });
+		if (phone) userRecord = await User.findOne({ phone });
+
+		if (!userRecord)
+			return res.status(404).send({
+				status: true,
+				msg: "User does't exits !!",
+			});
+
+		return res.status(200).send({
+			status: true,
+			userRecord,
+			msg: "User fetch successfully !!",
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.users = async (req, res) => {
+	try {
+		const page = req.query.page >= 1 ? req.query.page : 1;
+		const limit = req.query.limit >= 1 ? req.query.limit : 25;
+
+		const options = {
+			limit: parseInt(limit),
+			skip: (page - 1) * limit,
+			sort: { createdAt: -1 },
+		};
+
+		const filter = {};
+		if (req.query.type) filter.userType = req.query.type;
+
+		const users = await User.find(filter, null, options);
+		const totalUser = await User.countDocuments(filter);
+
+		return res.status(200).json({
+			status: true,
+			msg: "Data fetched successfully !!",
+			totalUser,
+			totalPage: parseInt(Math.ceil(totalUser / limit)),
+			currentPage: parseInt(page),
+			users,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.jobSeeker = async (req, res) => {
+	try {
+		const page = req.query.page >= 1 ? req.query.page : 1;
+		const limit = req.query.limit >= 1 ? req.query.limit : 25;
+
+		const options = {
+			limit: parseInt(limit),
+			skip: (page - 1) * limit,
+			sort: { createdAt: -1 },
+		};
+
+		const users = await User.find({ userType: "jobSeeker" }, null, options);
+		const totalUser = await User.countDocuments({ userType: "jobSeeker" });
+
+		return res.status(200).json({
+			status: true,
+			msg: "Data fetched successfully !!",
+			totalUser,
+			totalPage: parseInt(Math.ceil(totalUser / limit)),
+			currentPage: parseInt(page),
+			data: users,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.company = async (req, res) => {
+	try {
+		const page = req.query.page >= 1 ? req.query.page : 1;
+		const limit = req.query.limit >= 1 ? req.query.limit : 25;
+
+		const options = {
+			limit: parseInt(limit),
+			skip: (page - 1) * limit,
+			sort: { createdAt: -1 },
+		};
+
+		const users = await User.find({ userType: { $ne: "jobSeeker" } }, null, options);
+		const totalUser = await User.countDocuments({ userType: { $ne: "jobSeeker" } });
+
+		return res.status(200).json({
+			status: true,
+			msg: "Data fetched successfully !!",
+			totalUser,
+			totalPage: parseInt(Math.ceil(totalUser / limit)),
+			currentPage: parseInt(page),
+			data: users,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.update = async (req, res, io) => {
+	try {
+		const { _id } = req.params;
+		let bodyData = {};
+
+		if (req.body.phone) bodyData.phone = req.body.phone;
+		if (req.body.name) bodyData.name = req.body.name;
+		if (req.body.email) bodyData.email = req.body.email;
+		if (req.body.location) bodyData.location = req.body.location;
+		if (req.body.currentPay) bodyData.currentPay = req.body.currentPay;
+		if (req.body.expectationPay) bodyData.expectationPay = req.body.expectationPay;
+		if (req.body.experience) bodyData.experience = req.body.experience;
+		if (req.body.alternativePhone) bodyData.alternativePhone = req.body.alternativePhone;
+		if (req.body.gender) bodyData.gender = req.body.gender;
+		if (req.body.dob) bodyData.dob = req.body.dob;
+		if (req.body.about) bodyData.about = req.body.about;
+		if (req.body.profession) bodyData.profession = req.body.profession;
+		if (req.body.companyName) bodyData.companyName = req.body.companyName;
+		if (req.body.aboutCompany) bodyData.aboutCompany = req.body.aboutCompany;
+		if (req.body.companyType) bodyData.companyType = req.body.companyType;
+		if (req.body.companyEmail) bodyData.companyEmail = req.body.companyEmail;
+		if (req.body.companyPhone) bodyData.companyPhone = req.body.companyPhone;
+		if (req.body.companyAlternativePhone) bodyData.companyAlternativePhone = req.body.companyAlternativePhone;
+		if (req.body.skillDetails) {
+			const extractData = extractSkillSub(JSON.parse(req.body.skillDetails));
+			bodyData.skillDetails = extractData.mergedSkillDetails;
+			bodyData.skillSubCategories = extractData.skillSubCategories;
+			bodyData.skills = extractData.skills;
+		}
+
+		const user = await User.findOne({ _id });
+		if (!user) return res.status(404).json({ status: false, msg: "User doesn't exits !!" });
+
+		const phoneNumber = await User.findOne({ phone: bodyData.phone });
+		if (phoneNumber && phoneNumber._id.toString() !== _id)
+			return res
+				.status(401)
+				.json({ status: false, msg: "Can't add this phone number, It's already link to another account !!" });
+
+		if (req.files && req.files["profileImage"]) {
+			const profileImage = req.files["profileImage"][0];
+			if (profileImage) {
+				const profileImageUrl = await imageUpload(profileImage, `${req.user._id}_userImage`, "userImage");
+				if (!profileImageUrl)
+					return res.status(404).json({ status: false, msg: `Image upload failed, please try again !!` });
+				else bodyData.profileImage = profileImageUrl;
+			}
+		}
+
+		if (req.files && req.files["resume"]) {
+			const resume = req.files["resume"][0];
+			if (resume) {
+				const resumeUrl = await imageUpload(resume, `${req.user._id}_resume`, "resume");
+				if (!resumeUrl) return res.status(404).json({ status: false, msg: `Resume upload failed, please try again !!` });
+				else {
+					bodyData.resume = resumeUrl;
+					bodyData.resumeFileName = resume.originalname;
+				}
+			}
+		}
+
+		if (req.files && req.files["videoUrl"]) {
+			const video = req.files["videoUrl"][0];
+			if (video.size / 1024 / 1024 > 200)
+				return res.status(404).json({ status: false, msg: `Please upload under 200MB video !!`, user: {} });
+
+			const { originalname, buffer } = video;
+			const destinationDirectory = "./videos/";
+
+			if (!fs.existsSync(destinationDirectory)) fs.mkdirSync(destinationDirectory, { recursive: true });
+			const filePath = destinationDirectory + "video." + originalname.split(".").pop();
+
+			fs.writeFileSync(filePath, buffer);
+
+			const videoDuration = await getVideoDurationInSeconds(filePath);
+			if (videoDuration > 180)
+				return res.status(404).json({ status: false, msg: `Please upload a video under 3min !!`, user: {} });
+
+			if (video) {
+				const videoUrl = await imageUpload(video, `${req.user._id}_video`, "userVideo");
+				if (!videoUrl) return res.status(404).json({ status: false, msg: `Video upload failed, please try again !!` });
+				else bodyData.videoUrl = videoUrl;
+			}
+		}
+
+		if (req.files && req.files["letter"]) {
+			const letter = req.files["letter"][0];
+			if (letter) {
+				const letterUrl = await imageUpload(letter, `${req.user._id}_letter`, "userLetter");
+				if (!letterUrl) return res.status(404).json({ status: false, msg: `Letter upload failed, please try again !!` });
+				else {
+					bodyData.letter = letterUrl;
+					bodyData.letterFileName = letter.originalname;
+				}
+			}
+		}
+
+		if (req.files && req.files["companyLogo"]) {
+			const companyLogo = req.files["companyLogo"][0];
+			if (companyLogo) {
+				const companyLogoUrl = await imageUpload(companyLogo, `${req.user._id}_companyLogo`, "userCompanyLogo");
+				if (!companyLogoUrl)
+					return res.status(404).json({ status: false, msg: `Company Logo upload failed, please try again !!` });
+				else bodyData.companyLogo = companyLogoUrl;
+			}
+		}
+
+		const updatedUser = await User.findByIdAndUpdate({ _id }, { $set: bodyData }, { new: true });
+
+		// notification
+		if (req.body.skillDetails) {
+			const jobs = await jobModel
+				.find({
+					skillSubCategories: { $in: updatedUser.skillSubCategories.map((tag) => new RegExp(tag, "i")) },
+					skills: { $in: updatedUser.skills.map((tag) => new RegExp(tag, "i")) },
+					isActive: true,
+					blocked_status: false,
+				})
+				.select("userId skills skillSubCategories companyLogo jobTittle");
+
+			await Promise.all(
+				jobs.map(async (job) => {
+					const data = await createNotification({
+						senderId: updatedUser._id,
+						receiverId: job.userId,
+						title: `Candidate suggestion according to ${job.jobTittle} job skills`,
+						desc: `${updatedUser?.name} have knowledge in ${updatedUser.skills.join(", ")} skills`,
+						logo: job.companyLogo,
+						keyName: "users",
+						extraData: [updatedUser],
+					});
+					io.emit(`notifications_${data.receiverId._id}`, data);
+				})
+			);
+		}
+
+		if (req.files && req.files["videoUrl"]) {
+			const data = await createNotification({
+				senderId: updatedUser._id,
+				receiverId: updatedUser._id,
+				title: `${updatedUser.name} congratulation !!`,
+				desc: `${updatedUser.name} you update your intro video !!`,
+				logo: updatedUser.profileImage,
+			});
+			io.emit(`notifications_${data.receiverId._id}`, data);
+		}
+
+		// NOTE: Profile Complete Logic 👇👇
+		let phone = 0;
+		let name = 0;
+		let alternativePhone = 0;
+		let email = 0;
+		let profileImage = 0;
+		let location = 0;
+		let gender = 0;
+		let dob = 0;
+		let about = 0;
+
+		//  jobSeeker
+		let profession = 0;
+		let videoUrl = 0;
+		let currentPay = 0;
+		let expectationPay = 0;
+		let skills = 0;
+		let experience = 0;
+		let resume = 0;
+		let letter = 0;
+		let projects = 0;
+		let education = 0;
+
+		// companyRecruiter && individualRecruiter
+		let companyName = 0;
+		let aboutCompany = 0;
+		let companyLogo = 0;
+		let companyType = 0;
+		let companyEmail = 0;
+		let companyPhone = 0;
+		let companyAlternativePhone = 0;
+
+		// individualRecruiter" "companyRecruiter"
+		if (updatedUser.userType === "jobSeeker") {
+			if (updatedUser.name !== "") name = 10;
+			if (updatedUser.alternativePhone !== "") alternativePhone = 10;
+			if (updatedUser.email !== "") email = 10;
+			if (updatedUser.profileImage !== "") profileImage = 5;
+			if (updatedUser.location !== "") location = 5;
+			if (updatedUser.gender !== "") gender = 0;
+			if (updatedUser.dob !== "") dob = 0;
+			if (updatedUser.about !== "") about = 5;
+			if (updatedUser.profession !== "") profession = 0;
+			if (updatedUser.videoUrl !== "") videoUrl = 10;
+			if (updatedUser.currentPay !== "") currentPay = 0;
+			if (updatedUser.expectationPay !== "") expectationPay = 0;
+			if (updatedUser.skills.length > 0) skills = 10;
+			if (updatedUser.experience !== "") experience = 5;
+			if (updatedUser.resume !== "") resume = 10;
+			if (updatedUser.letter !== "") letter = 5;
+			if (updatedUser.projects.length > 0) projects = 5;
+			if (updatedUser.education.length > 0) education = 0;
+
+			updatedUser.profileComplete =
+				10 +
+				name +
+				alternativePhone +
+				email +
+				profileImage +
+				location +
+				gender +
+				dob +
+				about +
+				profession +
+				videoUrl +
+				currentPay +
+				expectationPay +
+				skills +
+				experience +
+				resume +
+				letter +
+				projects +
+				education;
+		} else {
+			if (updatedUser.name !== "") name = 10;
+			if (updatedUser.alternativePhone !== "") alternativePhone = 10;
+			if (updatedUser.email !== "") email = 10;
+			if (updatedUser.profileImage !== "") profileImage = 10;
+			if (updatedUser.location !== "") location = 10;
+			if (updatedUser.gender !== "") gender = 0;
+			if (updatedUser.dob !== "") dob = 0;
+			if (updatedUser.about !== "") about = 0;
+			if (updatedUser.companyName !== "") companyName = 5;
+			if (updatedUser.aboutCompany !== "") aboutCompany = 5;
+			if (updatedUser.companyLogo !== "") companyLogo = 10;
+			if (updatedUser.companyType !== "") companyType = 0;
+			if (updatedUser.companyEmail !== "") companyEmail = 10;
+			if (updatedUser.companyPhone !== "") companyPhone = 10;
+			if (updatedUser.companyAlternativePhone !== "") companyAlternativePhone = 10;
+
+			updatedUser.profileComplete =
+				10 +
+				name +
+				alternativePhone +
+				email +
+				profileImage +
+				location +
+				gender +
+				dob +
+				about +
+				companyName +
+				aboutCompany +
+				companyLogo +
+				companyType +
+				companyEmail +
+				companyPhone +
+				companyAlternativePhone;
+		}
+
+		await updatedUser.save();
+
+		return res.status(200).json({ status: true, user: updatedUser, msg: "User updated successfully !!" });
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.projects = async (req, res) => {
+	try {
+		const { _id } = req.params;
+		const bodyData = req.body;
+
+		const user = await User.findOne({ _id });
+		if (!user) return res.status(404).json({ status: false, msg: "User doesn't exits !!" });
+
+		if (user.projects.length === 0) user.profileComplete += 5;
+		await user.save();
+
+		const updatedUser = await User.findByIdAndUpdate({ _id }, { $set: { projects: bodyData } }, { new: true });
+		return res.status(200).json({ status: true, user: updatedUser, msg: "User updated successfully !!" });
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.education = async (req, res) => {
+	try {
+		const { _id } = req.params;
+		const bodyData = req.body;
+
+		const updatedUser = await User.findByIdAndUpdate({ _id }, { $set: { education: bodyData } }, { new: true });
+		return res.status(200).json({ status: true, user: updatedUser, msg: "User updated successfully !!" });
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.numberCheck = async (req, res) => {
+	try {
+		const { phone } = req.body;
+		if (!phone) return res.status(404).send({ status: false, msg: "Please provide a number !!" });
+
+		const findNumber = await User.findOne({ phone });
+		if (findNumber) {
+			return res.status(200).send({ status: true, firstTime: false, msg: "This number is already registered !!" });
+		} else {
+			await User.create({ phone });
+			return res.status(200).send({ status: true, firstTime: true, msg: "This number is not registered" });
+		}
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.getToken = async (req, res) => {
+	try {
+		const { phone, userType } = req.body;
+		console.log(phone);
+		if (!phone) return res.status(404).send({ status: false, msg: "Please provide number !!" });
+		const findNumber = await User.findOne({ phone });
+		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone is wrong, Please try again !!" });
+
+		let update;
+		if (userType.trim())
+			update = await User.findByIdAndUpdate(findNumber._id, { $set: { userType, profileComplete: 5 } }, { new: true });
+		else update = await User.findByIdAndUpdate(findNumber._id, { $set: { otp: "" } }, { new: true });
+
+		const token = jwt.sign({ _id: update._id }, JWT_SECRET, {
+			expiresIn: "60d",
+		});
+
+		return res.status(200).send({
+			status: true,
+			userId: update._id,
+			phone: update.phone,
+			userType: update.userType,
+			userData: update,
+			token,
+			msg: "Login successfully !!",
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.removeVideo = async (req, res) => {
+	try {
+		const { id } = req.params;
+
+		const user = await User.findOne({ _id: id });
+		if (!user) return res.status(404).json({ status: false, msg: "User doesn't exits !!" });
+		if (user.videoUrl === "") return res.status(404).json({ status: false, msg: "User doesn't have a video !!" });
+
+		const deleteResponse = await deleteFromFirebase(user.videoUrl);
+		if (!deleteResponse) throw Error("Error in deleting video from firebase");
+		user.videoUrl = "";
+		user.profileComplete -= 10;
+		await user.save();
+
+		return res.status(200).send({
+			status: true,
+			msg: "Video successfully !!",
+			data: user,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.removeProfile = async (req, res) => {
+	try {
+		const { id } = req.params;
+
+		const user = await User.findOne({ _id: id });
+		if (!user) return res.status(404).json({ status: false, msg: "User doesn't exits !!" });
+		if (user.profileImage === "") return res.status(404).json({ status: false, msg: "User doesn't have a profile image !!" });
+
+		const deleteResponse = await deleteFromFirebase(user.profileImage);
+		if (!deleteResponse) throw Error("Error in deleting profile image from firebase");
+		user.profileImage =
+			"https://firebasestorage.googleapis.com/v0/b/hiringroof.appspot.com/o/static%20data%2FAvtar.png?alt=media&token=5a84bf05-8bec-4f7b-b9f3-deb8205b8cef";
+		if (user.userType === "jobSeeker") user.profileComplete -= 5;
+		else user.profileComplete -= 10;
+		await user.save();
+
+		return res.status(200).send({
+			status: true,
+			msg: "Video successfully !!",
+			data: user,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+userController.blockUnblock = async (req, res) => {
+	try {
+		const { id, block, reason } = req.body;
+
+		let blockData = {};
+		if (block)
+			blockData = {
+				reason,
+				date: new Date(),
+				blockedBy: req.user._id,
+			};
+		else
+			blockData = {
+				reason: "",
+				date: "",
+				blockedBy: null,
+			};
+
+		const user = await User.findOne({ _id: id });
+		if (!user) return res.status(404).json({ status: false, msg: "User doesn't exits !!" });
+
+		user.blocked_status = block;
+		user.blocked = blockData;
+		await user.save();
+
+		return res.status(200).send({
+			status: true,
+			msg: block ? "Block successfully !!" : "Unblock Successfully!!",
+			data: user,
+		});
+	} catch (error) {
+		console.log(error);
+		res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+module.exports = userController;

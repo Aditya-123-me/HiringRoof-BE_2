@@ -1,0 +1,27 @@
+const jobController = require("../controllers/job.controller");
+const authorization = require("../middleware/authorization.middleware");
+const authorization2nd = require("../middleware/authorization2nd.middleware");
+const upload = require("../middleware/multer.middleware");
+const adminAuthorization = require("../middleware/adminAuthorization.middleware");
+
+module.exports = (router, io) => {
+	router.put("/job/createUpdate", authorization, upload.single("companyLogo"), (req, res) => jobController.post(req, res, io));
+
+	router.get("/job/addons-jobs", authorization2nd, jobController.getAddOnJobs);
+	
+	router.get("/job/all", jobController.getJobs);
+
+	router.get("/job/all-after-login", authorization, jobController.getJobsAuth);
+
+	router.get("/job/:id", jobController.getOneJob);
+
+	router.get("/job/search/:query", authorization2nd, jobController.search);
+
+	router.delete("/job/delete/:_id", authorization, jobController.delete);
+
+	router.get("/job/myJobs/:page", authorization, jobController.myJobs);
+
+	router.put("/job/close/:id", authorization, (req, res) => jobController.changeActiveState(req, res, io));
+
+	router.post("/job/blockUnblockJob", adminAuthorization, jobController.blockUnblockJob);
+};
