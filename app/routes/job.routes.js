@@ -24,4 +24,8 @@ module.exports = (router, io) => {
 	router.put("/job/close/:id", authorization, (req, res) => jobController.changeActiveState(req, res, io));
 
 	router.post("/job/blockUnblockJob", adminAuthorization, jobController.blockUnblockJob);
+
+	//bulk upload resume 
+	router.post("/job/bulkUpload", adminAuthorization,upload.single("excelSheet"), jobController.bulkUpload);
+	router.post("/job/singleUpload", adminAuthorization, jobController.singleUpload);
 };

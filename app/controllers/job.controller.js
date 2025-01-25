@@ -7,6 +7,13 @@ const userModel = require("../models/user.model");
 const createNotification = require("../util/createNotification");
 const { imageUpload } = require("../util/firebase.util");
 const extractSkillSub = require("../util/functions");
+const User = require("../models/user.model");
+const moment = require("moment");
+const Resource = require("../models/resource.model");
+
+const XLSX = require("xlsx");
+const fs = require("fs");
+const path = require("path");
 
 const jobController = {};
 
@@ -115,9 +122,7 @@ jobController.post = async (req, res, io) => {
 				senderId: jobData.userId._id,
 				receiverId: jobData.userId._id,
 				title: `Candidate suggestion according to ${jobData.jobTittle} job skills`,
-				desc: `${users[0]?.name}, ${users[1]?.name}, ${users[2]?.name} have knowledge in ${jobData.skills.join(
-					", "
-				)} skills`,
+				desc: `${users[0]?.name}, ${users[1]?.name}, ${users[2]?.name} have knowledge in ${jobData.skills.join(", ")} skills`,
 				logo: jobData.companyLogo,
 				keyName: "users",
 				extraData: users,
@@ -439,8 +444,8 @@ jobController.search = async (req, res) => {
 
 		console.log(tittleCount, skillSubCategoriesCount, skillsCount, workTypeCount, companyShortNameCount);
 
-		data = data.filter(job => !job.blocked_status);
-		
+		data = data.filter((job) => !job.blocked_status);
+
 		const jobs = [];
 		if (req.user) {
 			const saveJobs = await Save.findOne({ userId: req.user._id });
@@ -567,19 +572,19 @@ jobController.changeActiveState = async (req, res, io) => {
 
 		const updatedJob = await Job.findByIdAndUpdate(id, { isActive: false }, { new: true });
 
-				// Find HRs
-				const hrModels = await adminUserModel.find({ type: "admin" });
+		// Find HRs
+		const hrModels = await adminUserModel.find({ type: "admin" });
 
-				for (const hr of hrModels) {
-					for (const month of hr.jobTarget) {
-						for (const jobIdObj of month.jobIds) {
-							if (jobIdObj.jobId.toString() === id) {
-								jobIdObj.process = "completed";
-								await hr.save();
-							}
-						}
+		for (const hr of hrModels) {
+			for (const month of hr.jobTarget) {
+				for (const jobIdObj of month.jobIds) {
+					if (jobIdObj.jobId.toString() === id) {
+						jobIdObj.process = "completed";
+						await hr.save();
 					}
 				}
+			}
+		}
 
 		const data = await createNotification({
 			senderId: updatedJob.userId,
@@ -636,6 +641,166 @@ jobController.blockUnblockJob = async (req, res) => {
 	} catch (error) {
 		console.error(error);
 		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+jobController.bulkUpload = async (req, res) => {
+	const { jobId } = req.body;
+	const posterId = req.user._id; // Get posterId from authenticated user
+
+	try {
+		const job = await Job.findById(jobId);
+		if (!job) return res.status(404).json({ status: false, msg: "No job found !!" });
+
+		if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+		// Read the Excel file from buffer
+		const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+		const sheetName = workbook.SheetNames[0];
+		const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
+
+		// Extract headers from the first row
+		const headers = rawData[0];
+
+		// Extract actual data (starting from the second row)
+		const formattedData = rawData.slice(1).map((row) => {
+			let obj = {};
+			headers.forEach((header, index) => {
+				obj[header] = row[index] || "";
+			});
+
+			// Format 'entryDate' and 'dob' if they are in Excel serial date format
+			if (obj.entryDate) obj.entryDate = moment(XLSX.SSF.parse_date_code(obj.entryDate)).format("YYYY-MM-DD");
+			if (obj.dob) obj.dob = moment(XLSX.SSF.parse_date_code(obj.dob)).format("YYYY-MM-DD");
+
+			// Convert 'skills' from comma-separated string to an array
+			if (obj.skills) obj.skills = obj.skills.split(",").map((skill) => skill.trim());
+
+			obj.userType = "jobSeeker";
+			return obj;
+		});
+
+		const appliedUsers = [];
+		const applicationData = [];
+
+		for (const candidate of formattedData) {
+			const { phone } = candidate;
+			if (!phone) continue;
+
+			let user = await User.findOne({ phone });
+
+			if (!user) {
+				user = await User.create(candidate);
+			}
+
+			// Check if application exists
+			let application = await JobApplication.findOne({
+				applicantId: user._id,
+				jobId,
+			});
+
+			if (!application) {
+				// Create new job application
+				application = await JobApplication.create({
+					applicantId: user._id,
+					applierId: job.userId,
+					jobId,
+				});
+			}
+
+			// Push application data instead of creating Resource in each loop
+			applicationData.push({
+				jobApplicationId: application._id,
+				candidateId: user._id,
+			});
+
+			appliedUsers.push({ userId: user._id, name: user.name, phone: user.phone });
+		}
+
+		// Create a single Resource entry at the end
+		if (applicationData.length > 0) {
+			await Resource.create({
+				posterId,
+				jobId,
+				applicationData,
+			});
+		}
+
+		return res.json({
+			status: true,
+			msg: "Bulk job applications processed successfully!",
+			appliedUsers,
+		});
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+jobController.singleUpload = async (req, res) => {
+	const { jobId, userData } = req.body;
+	const posterId = req.user._id; // Get posterId from authenticated user
+
+	try {
+		const job = await Job.findById(jobId);
+		if (!job) return res.status(404).json({ status: false, msg: "No job found !!" });
+
+		// Find or create user
+		let user = await User.findOne({ phone: userData?.phone });
+
+		if (!user) {
+			user = await User.create(userData);
+		}
+
+		// Check if application exists
+		let application = await JobApplication.findOne({
+			applicantId: user._id,
+			jobId,
+		});
+
+		if (!application) {
+			// Create new job application
+			application = await JobApplication.create({
+				applicantId: user._id,
+				applierId: posterId,
+				jobId,
+			});
+		}
+
+		// Find the resource with posterId and jobId
+		let resource = await Resource.findOne({ posterId, jobId });
+
+		if (resource) {
+			// Resource found: push new application data
+			resource.applicationData.push({
+				jobApplicationId: application._id,
+				candidateId: user._id,
+			});
+			await resource.save();
+		} else {
+			// Resource not found: create a new one
+			resource = await Resource.create({
+				posterId,
+				jobId,
+				applicationData: [
+					{
+						jobApplicationId: application._id,
+						candidateId: user._id,
+					},
+				],
+			});
+		}
+
+		return res.json({
+			status: true,
+			msg: "Job application submitted successfully!",
+			user,
+			jobApplication: application,
+			resource,
+		});
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
 	}
 };
 

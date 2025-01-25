@@ -79,6 +79,18 @@ const userSchema = mongoose.Schema(
 			blockedBy: { type: mongoose.Schema.Types.ObjectId, ref: "adminUser", default: null },
 		},
 		blocked_status: { type: Boolean, default: false },
+		entryDate: { type: String, default: "" },
+		immediateJoiner: { type: String, default: "" },
+		lastQualification: { type: String, default: "" },
+		passoutYear: { type: String, default: "" },
+		experience: { type: String, default: "" },
+		withoutContactResume: { type: String, default: "" },
+		response: { type: String, default: "" },
+		wfo: { type: String, default: "" },
+		interested: { type: String, default: "" },
+		callBy: { type: String, default: "" },
+		feedback: { type: String, default: "" },
+		source: { type: String, default: "" },
 	},
 	{ timestamps: true }
 );
