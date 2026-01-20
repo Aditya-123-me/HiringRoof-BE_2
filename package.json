@@ -5,8 +5,8 @@
 	"main": "index.js",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"start": "nodemon index.js",
-		"dev": "node --watch index.js"
+		"start": "node index.js",
+		"dev": "nodemon index.js"
 	},
 	"author": "Rohan Mondal",
 	"license": "ISC",
@@ -26,12 +26,14 @@
 		"multer": "^1.4.5-lts.1",
 		"node-schedule": "^2.1.1",
 		"nodemailer": "^6.9.13",
-		"nodemon": "^3.0.1",
 		"pdf-parse": "^1.1.1",
 		"pdfkit-table": "^0.1.99",
 		"sha256": "^0.2.0",
 		"socket.io": "^4.7.4",
 		"textract": "^2.5.0",
 		"xlsx": "^0.18.5"
+	},
+	"devDependencies": {
+		"nodemon": "^3.0.1"
 	}
 }
