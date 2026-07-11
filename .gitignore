@@ -2,3 +2,5 @@
 /public
 /videos/
 .env
+google-key.json
+oauth-credentials.json

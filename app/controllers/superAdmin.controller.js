@@ -1,6 +1,6 @@
 const adminUserModel = require("../models/adminUser.model");
 const RejectedInterview = require("../models/rejected.model");
-const { imageUpload } = require("../util/firebase.util");
+const { imageUpload } = require("../util/googleDrive.util");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = require("../config/config");
 const jobModel = require("../models/job.model");
