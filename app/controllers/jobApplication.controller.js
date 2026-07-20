@@ -409,7 +409,7 @@ jobApplication.apply = async (req, res, io) => {
 
 		await JobApplication.create(applicationBody);
 
-		const populatedData = await JobApplication.findOne(applicationBody)
+		const populatedData = await JobApplication.findOne({ applicantId, applierId, jobId })
 			.populate({ path: "applicantId", select: "name email phone isHired" })
 			.populate({ path: "applierId", select: "name email phone" })
 			.populate({ path: "jobId", populate: [{ path: "userId", select: "name profileImage userType phone" }] });
@@ -1739,6 +1739,225 @@ jobApplication.getMonthJobHR = async (req, res) => {
 	} catch (error) {
 		console.error("Error fetching admin jobs:", error);
 		res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+jobApplication.adminShortlist = async (req, res, io) => {
+	try {
+		const application = await JobApplication.findOne({ _id: req.params._id });
+		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
+
+		const updatedApplication = await JobApplication.findByIdAndUpdate(application._id, { shortlist: true }, { new: true })
+			.populate("jobId")
+			.populate({ path: "applierId", select: "name userType profileImage" })
+			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		const data = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applicantId,
+			title: `${updatedApplication.jobId.companyName}`,
+			desc: `You are shortlisted for ${updatedApplication.jobId.jobTittle} job by Admin`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data.receiverId._id}`, data);
+
+		const data2 = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applierId,
+			title: `${updatedApplication.jobId.jobTittle}`,
+			desc: `Admin shortlisted ${
+				updatedApplication.applicantId.name === "" ? "Someone" : updatedApplication.applicantId.name
+			} for ${updatedApplication.jobId.jobTittle} job`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data2.receiverId._id}`, data2);
+
+		return res.status(200).send({ status: true, msg: "Application updated for shortlist from Admin Side !!", data: updatedApplication });
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+jobApplication.doInterviewSelectAdminSide = async (req, res, io) => {
+	try {
+		if (!req.body.interviewsDate)
+			return res.status(404).send({ status: true, msg: "Please provide a interview date !!", data: [] });
+		if (!req.body.interviewsTime)
+			return res.status(404).send({ status: true, msg: "Please provide a interview time !!", data: [] });
+
+		const time = convertTo12HourFormat(req.body.interviewsTime);
+
+		const application = await JobApplication.findOne({ _id: req.params._id });
+		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
+
+		const updatedApplication = await JobApplication.findByIdAndUpdate(
+			application._id,
+			{
+				interviews: true,
+				interviewsDate: req.body.interviewsDate,
+				interviewsTime: time,
+			},
+			{ new: true }
+		)
+			.populate("jobId")
+			.populate({ path: "applierId", select: "name userType profileImage" })
+			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		const hrAdmin = await adminUserModel.findOne({ "jobTarget.jobIds.jobId": application.jobId });
+		if (hrAdmin) {
+			hrAdmin.interviewScheduled += 1;
+			await hrAdmin.save();
+		}
+
+		const data = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applicantId,
+			title: `${updatedApplication.jobId.companyName}`,
+			desc: `You are selected for interview for the ${updatedApplication.jobId.jobTittle} job by Admin on ${updatedApplication.interviewsDate} at ${updatedApplication.interviewsTime}`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data.receiverId._id}`, data);
+
+		const data2 = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applierId,
+			title: `${updatedApplication.jobId.jobTittle}`,
+			desc: `Admin scheduled first round of interview with ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviewsDate} at ${updatedApplication.interviewsTime}`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data2.receiverId._id}`, data2);
+
+		return res.status(200).send({ status: true, msg: "Application updated for interview from Admin Side!!", data: updatedApplication });
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+jobApplication.doInterview2SelectAdminSide = async (req, res, io) => {
+	try {
+		if (!req.body.interviews2Date)
+			return res.status(404).send({ status: true, msg: "Please provide a interview date !!", data: [] });
+		if (!req.body.interviews2Time)
+			return res.status(404).send({ status: true, msg: "Please provide a interview time !!", data: [] });
+
+		const time = convertTo12HourFormat(req.body.interviews2Time);
+		const application = await JobApplication.findOne({ _id: req.params._id });
+		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
+
+		const updatedApplication = await JobApplication.findByIdAndUpdate(
+			application._id,
+			{
+				interviews2: true,
+				interviews2Date: req.body.interviews2Date,
+				interviews2Time: time,
+			},
+			{ new: true }
+		)
+			.populate("jobId")
+			.populate({ path: "applierId", select: "name userType profileImage" })
+			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		const hrAdmin = await adminUserModel.findOne({ "jobTarget.jobIds.jobId": application.jobId });
+		if (hrAdmin) {
+			hrAdmin.interviewScheduled += 1;
+			await hrAdmin.save();
+		}
+
+		const data = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applicantId,
+			title: `${updatedApplication.jobId.companyName}`,
+			desc: `You are selected for a second round of interviews for the ${updatedApplication.jobId.jobTittle} job by Admin on ${req.body.interviews2Date} at ${updatedApplication.interviews2Time}`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data.receiverId._id}`, data);
+
+		const data2 = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applierId,
+			title: `${updatedApplication.jobId.jobTittle}`,
+			desc: `Admin scheduled second round of interview with ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviews2Date} at ${updatedApplication.interviews2Time}`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data2.receiverId._id}`, data2);
+
+		return res.status(200).send({ status: true, msg: "Application updated for interview 2 from Admin Side !!", data: updatedApplication });
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+jobApplication.selectedAdminSide = async (req, res, io) => {
+	try {
+		const offerLetterDate = req.body.offerLetterDate;
+		const offerLetterTime = convertTo12HourFormat(req.body.offerLetterTime);
+
+		const application = await JobApplication.findOne({ _id: req.params._id });
+		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
+
+		const findUser = await User.findOne({ _id: application.applicantId });
+		if (findUser) {
+			findUser.isHired = true;
+			await findUser.save();
+		}
+
+		const updatedApplication = await JobApplication.findByIdAndUpdate(
+			application._id,
+			{ selectedCandidates: true, offerLetterDate, offerLetterTime },
+			{ new: true }
+		)
+			.populate("jobId")
+			.populate({ path: "applierId", select: "name userType profileImage" })
+			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		const jobId = application.jobId;
+
+		const adminUsers = await adminUserModel.find();
+		for (const adminUser of adminUsers) {
+			if (adminUser.type === "superAdmin") continue;
+			for (const monthJob of adminUser.jobTarget) {
+				if (monthJob.jobIds.find(job => job.jobId.equals(jobId))) {
+					monthJob.jobsDone += 1;
+					adminUser.totalHired += 1;
+					break;
+				}
+			}
+			await adminUser.save();
+		}
+
+		const data = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applicantId,
+			title: `${updatedApplication.jobId.companyName}`,
+			desc: `You have been selected for the ${updatedApplication.jobId.jobTittle} job by Admin`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data.receiverId._id}`, data);
+
+		const data2 = await createNotification({
+			senderType: "adminUser",
+			senderId: req.user._id,
+			receiverId: updatedApplication.applierId,
+			title: `${updatedApplication.jobId.jobTittle}`,
+			desc: `Admin selected candidate ${updatedApplication.applicantId.name} for your ${updatedApplication.jobId.jobTittle} job`,
+			logo: updatedApplication.jobId.companyLogo,
+		});
+		io.emit(`notifications_${data2.receiverId._id}`, data2);
+
+		return res.status(200).send({ status: true, msg: "You selected this candidate !!", data: updatedApplication });
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
 	}
 };
 

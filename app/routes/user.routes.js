@@ -43,4 +43,21 @@ module.exports = (router, io) => {
 	router.put("/user/remove-profile/:id", authorization, userController.removeProfile);
 
 	router.put("/user/block-unblock", adminAuthorization, userController.blockUnblock);
+
+	// Admin-side profile lookup and edits
+	router.get("/user/user-adminSide", adminAuthorization, userController.user);
+	router.put(
+		"/user/update-adminSide/:_id",
+		adminAuthorization,
+		upload.fields([
+			{ name: "profileImage", maxCount: 1 },
+			{ name: "videoUrl", maxCount: 1 },
+			{ name: "resume", maxCount: 1 },
+			{ name: "letter", maxCount: 1 },
+			{ name: "companyLogo", maxCount: 1 },
+		]),
+		(req, res) => userController.update(req, res, io)
+	);
+	router.put("/user/project-adminSide/:_id", adminAuthorization, userController.projects);
+	router.put("/user/education-adminSide/:_id", adminAuthorization, userController.education);
 };

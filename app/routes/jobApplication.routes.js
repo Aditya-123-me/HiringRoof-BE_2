@@ -56,6 +56,22 @@ module.exports = (router, io) => {
 	router.get("/jobApplication/getJobTargetsByMonthAndYear",adminAuthorization, jobApplication.getJobTargetsByMonthAndYear);
 	
 	router.get("/jobApplication/getMonthJobHR",adminAuthorization, jobApplication.getMonthJobHR);
+
+	router.put("/jobApplication/admin-shortlist/:_id", adminAuthorization, (req, res) =>
+		jobApplication.adminShortlist(req, res, io)
+	);
+
+	router.put("/jobApplication/interview-select-adminSide/:_id", adminAuthorization, (req, res) =>
+		jobApplication.doInterviewSelectAdminSide(req, res, io)
+	);
+
+	router.put("/jobApplication/interview-2-select-adminSide/:_id", adminAuthorization, (req, res) =>
+		jobApplication.doInterview2SelectAdminSide(req, res, io)
+	);
+
+	router.put("/jobApplication/selected-adminSide/:_id", adminAuthorization, (req, res) =>
+		jobApplication.selectedAdminSide(req, res, io)
+	);
 	// Admin End
 
 };
