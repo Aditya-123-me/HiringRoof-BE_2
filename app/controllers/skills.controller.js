@@ -7,7 +7,17 @@ skills.one = async (req, res, io) => {
 		const { mainCategory } = req.query;
 
 		if (!mainCategory) {
-			return res.status(400).json({ status: false, message: "Main category parameter is required" });
+			const skillsDocuments = await skillsModel.find();
+			const flatSkills = [];
+			skillsDocuments.forEach((doc) => {
+				if (doc.subcategories) {
+					for (const subCat of doc.subcategories.values()) {
+						if (Array.isArray(subCat.skills)) flatSkills.push(...subCat.skills);
+					}
+				}
+			});
+			const uniqueSkills = [...new Set(flatSkills)];
+			return res.status(200).json({ status: true, skills: uniqueSkills, data: uniqueSkills });
 		}
 
 		const skill = await skillsModel.findOne({ mainCategory });
@@ -16,6 +26,8 @@ skills.one = async (req, res, io) => {
 			return res.status(404).json({ status: false, message: "Main category not found" });
 		}
 
+		/*
+		// OLD IMPLEMENTATION
 		const subcategories = [];
 		skill.subcategories.forEach((subCategory) => {
 			subcategories.push({
@@ -28,6 +40,21 @@ skills.one = async (req, res, io) => {
 			status: true,
 			data: { mainCategory: skill.mainCategory, subcategories },
 		});
+		*/
+
+		const flatSkills = [];
+		if (skill.subcategories) {
+			for (const subCat of skill.subcategories.values()) {
+				if (Array.isArray(subCat.skills)) flatSkills.push(...subCat.skills);
+			}
+		}
+		const uniqueSkills = [...new Set(flatSkills)];
+
+		return res.status(200).json({
+			status: true,
+			skills: uniqueSkills,
+			data: uniqueSkills,
+		});
 	} catch (error) {
 		console.error(error);
 		return res.status(500).json({ status: false, message: "Internal server error" });
@@ -36,13 +63,15 @@ skills.one = async (req, res, io) => {
 
 skills.getAll = async (req, res, io) => {
 	try {
-		const skills = await skillsModel.find();
+		const skillsDocuments = await skillsModel.find();
 
+		/*
+		// OLD IMPLEMENTATION: Main categories & subcategories (Commented out temporarily)
 		const mainCategories = [];
 		const subcategories = [];
 		const allSkills = [];
 
-		skills.forEach((skillDocument) => {
+		skillsDocuments.forEach((skillDocument) => {
 			mainCategories.push(skillDocument.mainCategory);
 
 			for (const subCategory of skillDocument.subcategories.values()) {
@@ -70,6 +99,27 @@ skills.getAll = async (req, res, io) => {
 				allSkills,
 			},
 		});
+		*/
+
+		// NEW SIMPLE IMPLEMENTATION: Flat Array of Skill Strings
+		const flatSkills = [];
+		skillsDocuments.forEach((doc) => {
+			if (doc.subcategories) {
+				for (const subCat of doc.subcategories.values()) {
+					if (Array.isArray(subCat.skills)) {
+						flatSkills.push(...subCat.skills);
+					}
+				}
+			}
+		});
+
+		const uniqueSkills = [...new Set(flatSkills)];
+
+		return res.status(200).json({
+			status: true,
+			skills: uniqueSkills,
+			data: uniqueSkills,
+		});
 	} catch (error) {
 		console.error(error);
 		return res.status(500).json({ status: false, message: "Internal server error" });
@@ -80,22 +130,34 @@ skills.create = async (req, res, io) => {
 	try {
 		const { mainCategory, subCategory, skills } = req.body;
 
-		if (!Array.isArray(skills)) {
+		let skillsList = [];
+		if (Array.isArray(skills)) {
+			skillsList = skills;
+		} else if (typeof skills === "string") {
+			skillsList = [skills];
+		} else if (Array.isArray(req.body)) {
+			skillsList = req.body;
+		}
+
+		if (!skillsList.length) {
 			return res.status(400).json({ status: false, message: "Skills array is required" });
 		}
 
-		let skill = await skillsModel.findOne({ mainCategory });
+		const categoryName = mainCategory || "General";
+		const subCatName = subCategory || "General";
+
+		let skill = await skillsModel.findOne({ mainCategory: categoryName });
 
 		if (!skill) {
-			skill = new skillsModel({ mainCategory });
+			skill = new skillsModel({ mainCategory: categoryName });
 		}
 
-		if (!skill.subcategories.has(subCategory)) {
-			skill.subcategories.set(subCategory, { name: subCategory, skills: [] });
+		if (!skill.subcategories.has(subCatName)) {
+			skill.subcategories.set(subCatName, { name: subCatName, skills: [] });
 		}
 
-		const subcategory = skill.subcategories.get(subCategory);
-		skills.forEach((skillName) => {
+		const subcategory = skill.subcategories.get(subCatName);
+		skillsList.forEach((skillName) => {
 			if (!subcategory.skills.includes(skillName)) {
 				subcategory.skills.push(skillName);
 			}
@@ -103,7 +165,7 @@ skills.create = async (req, res, io) => {
 
 		await skill.save();
 
-		return res.status(200).json({ status: true, message: "Skills added successfully" });
+		return res.status(200).json({ status: true, message: "Skills added successfully", skills: subcategory.skills });
 	} catch (error) {
 		console.error(error);
 		return res.status(500).json({ status: false, message: "Internal server error" });

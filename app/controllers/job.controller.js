@@ -52,11 +52,27 @@ jobController.post = async (req, res, io) => {
 			bodyData.companyShortName = shortName;
 		}
 		if (req.body.addOn) bodyData.addOn = JSON.parse(req.body.addOn);
+		if (req.body.skills) {
+			if (typeof req.body.skills === "string") {
+				try {
+					bodyData.skills = JSON.parse(req.body.skills);
+				} catch (e) {
+					bodyData.skills = req.body.skills.split(",").map((s) => s.trim()).filter(Boolean);
+				}
+			} else if (Array.isArray(req.body.skills)) {
+				bodyData.skills = req.body.skills;
+			}
+		}
+
 		if (req.body.skillDetails) {
-			const extractData = extractSkillSub(JSON.parse(req.body.skillDetails));
-			bodyData.skillDetails = extractData.mergedSkillDetails;
-			bodyData.skillSubCategories = extractData.skillSubCategories;
-			bodyData.skills = extractData.skills;
+			try {
+				const extractData = extractSkillSub(typeof req.body.skillDetails === "string" ? JSON.parse(req.body.skillDetails) : req.body.skillDetails);
+				bodyData.skillDetails = extractData.mergedSkillDetails;
+				bodyData.skillSubCategories = extractData.skillSubCategories;
+				if (!bodyData.skills) bodyData.skills = extractData.skills;
+			} catch (e) {
+				console.log("Job skill details parsing skipped");
+			}
 		}
 
 		// Tag added Start
@@ -93,10 +109,12 @@ jobController.post = async (req, res, io) => {
 		const jobData = await Job.findById(job._id).populate("userId");
 
 		if (!_id) {
+			const skillSubCats = (jobData.skillSubCategories || []).map((tag) => new RegExp(tag, "i"));
+			const userSkills = (jobData.skills || []).map((tag) => new RegExp(tag, "i"));
+
 			const users = await userModel
 				.find({
-					skillSubCategories: { $in: jobData.skillSubCategories.map((tag) => new RegExp(tag, "i")) },
-					skills: { $in: jobData.skills.map((tag) => new RegExp(tag, "i")) },
+					$or: [{ skillSubCategories: { $in: skillSubCats } }, { skills: { $in: userSkills } }],
 					blocked_status: false,
 				})
 				.select("name email phone profileImage userType videoUrl skills skillSubCategories experience");
@@ -118,11 +136,12 @@ jobController.post = async (req, res, io) => {
 				})
 			);
 
+			const userNames = users.slice(0, 3).map((u) => u?.name || "Candidate").join(", ");
 			const data = await createNotification({
 				senderId: jobData.userId._id,
 				receiverId: jobData.userId._id,
 				title: `Candidate suggestion according to ${jobData.jobTittle} job skills`,
-				desc: `${users[0]?.name}, ${users[1]?.name}, ${users[2]?.name} have knowledge in ${jobData.skills.join(", ")} skills`,
+				desc: `${userNames} have knowledge in ${(jobData.skills || []).join(", ")} skills`,
 				logo: jobData.companyLogo,
 				keyName: "users",
 				extraData: users,

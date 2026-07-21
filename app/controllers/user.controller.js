@@ -295,11 +295,27 @@ userController.update = async (req, res, io) => {
 		if (req.body.companyEmail) bodyData.companyEmail = req.body.companyEmail;
 		if (req.body.companyPhone) bodyData.companyPhone = req.body.companyPhone;
 		if (req.body.companyAlternativePhone) bodyData.companyAlternativePhone = req.body.companyAlternativePhone;
+		if (req.body.skills) {
+			if (typeof req.body.skills === "string") {
+				try {
+					bodyData.skills = JSON.parse(req.body.skills);
+				} catch (e) {
+					bodyData.skills = req.body.skills.split(",").map((s) => s.trim()).filter(Boolean);
+				}
+			} else if (Array.isArray(req.body.skills)) {
+				bodyData.skills = req.body.skills;
+			}
+		}
+
 		if (req.body.skillDetails) {
-			const extractData = extractSkillSub(JSON.parse(req.body.skillDetails));
-			bodyData.skillDetails = extractData.mergedSkillDetails;
-			bodyData.skillSubCategories = extractData.skillSubCategories;
-			bodyData.skills = extractData.skills;
+			try {
+				const extractData = extractSkillSub(typeof req.body.skillDetails === "string" ? JSON.parse(req.body.skillDetails) : req.body.skillDetails);
+				bodyData.skillDetails = extractData.mergedSkillDetails;
+				bodyData.skillSubCategories = extractData.skillSubCategories;
+				if (!bodyData.skills) bodyData.skills = extractData.skills;
+			} catch (e) {
+				console.log("Skill details parsing skipped");
+			}
 		}
 
 		const user = await User.findOne({ _id });
@@ -382,11 +398,13 @@ userController.update = async (req, res, io) => {
 		const updatedUser = await User.findByIdAndUpdate({ _id }, { $set: bodyData }, { new: true });
 
 		// notification
-		if (req.body.skillDetails) {
+		if (req.body.skillDetails || req.body.skills) {
+			const skillSubCats = (updatedUser.skillSubCategories || []).map((tag) => new RegExp(tag, "i"));
+			const userSkills = (updatedUser.skills || []).map((tag) => new RegExp(tag, "i"));
+
 			const jobs = await jobModel
 				.find({
-					skillSubCategories: { $in: updatedUser.skillSubCategories.map((tag) => new RegExp(tag, "i")) },
-					skills: { $in: updatedUser.skills.map((tag) => new RegExp(tag, "i")) },
+					$or: [{ skillSubCategories: { $in: skillSubCats } }, { skills: { $in: userSkills } }],
 					isActive: true,
 					blocked_status: false,
 				})

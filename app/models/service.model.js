@@ -11,6 +11,13 @@ const serviceSchema = mongoose.Schema(
 		merchantTransactionId: { type: String, default: "" },
 		isPaymentSuccess: { type: Boolean, default: false },
 		isActive: { type: Boolean, default: null },
+		paymentScreenshot: { type: String, default: "" },
+		paymentStatus: {
+			type: String,
+			enum: ["PENDING", "APPROVED", "REJECTED"],
+			default: "PENDING",
+		},
+		rejectionReason: { type: String, default: "" },
 	},
 	{ timestamps: true }
 );

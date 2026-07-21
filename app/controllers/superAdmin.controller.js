@@ -277,4 +277,50 @@ superAdmin.getStatistics = async (req, res) => {
 	}
 };
 
+superAdmin.getManualPayments = async (req, res) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const status = req.query.status || "PENDING";
+		const payments = await serviceModel.find({ paymentStatus: status })
+			.populate("userId", "name email phone profileImage userType")
+			.sort({ createdAt: -1 });
+
+		return res.status(200).json({ status: true, count: payments.length, data: payments });
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+superAdmin.verifyManualPayment = async (req, res) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const { id } = req.params;
+		const { action, rejectionReason } = req.body;
+
+		const service = await serviceModel.findById(id);
+		if (!service) return res.status(404).json({ status: false, msg: "Payment record not found!" });
+
+		if (action === "APPROVE") {
+			service.paymentStatus = "APPROVED";
+			service.isPaymentSuccess = true;
+			service.isActive = true;
+			await service.save();
+			return res.status(200).json({ status: true, msg: "Manual payment approved successfully!", data: service });
+		} else if (action === "REJECT") {
+			service.paymentStatus = "REJECTED";
+			service.isPaymentSuccess = false;
+			service.isActive = false;
+			service.rejectionReason = rejectionReason || "Payment verification failed";
+			await service.save();
+			return res.status(200).json({ status: true, msg: "Manual payment rejected!", data: service });
+		} else {
+			return res.status(400).json({ status: false, msg: "Invalid action! Use APPROVE or REJECT." });
+		}
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = superAdmin;

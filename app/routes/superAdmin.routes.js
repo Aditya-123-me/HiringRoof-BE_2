@@ -8,4 +8,6 @@ module.exports = (router, io) => {
 	router.get("/superAdmin/get-interviews-history", adminAuthorization, superAdmin.getInterviewsHistory);
 	router.get("/superAdmin/getJobTargetsSuperAdmin", adminAuthorization, superAdmin.getJobTargetsSuperAdmin);
 	router.get("/superAdmin/getStatistics", adminAuthorization, superAdmin.getStatistics);
+	router.get("/superAdmin/manual-payments", adminAuthorization, superAdmin.getManualPayments);
+	router.put("/superAdmin/verify-manual-payment/:id", adminAuthorization, superAdmin.verifyManualPayment);
 };

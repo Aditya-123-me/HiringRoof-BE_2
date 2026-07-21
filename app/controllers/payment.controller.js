@@ -364,4 +364,55 @@ paymentController.status = async (req, res) => {
 	}
 };
 
+paymentController.manualServicePayment = async (req, res) => {
+	try {
+		const { date, time } = req.body;
+		let serviceData = req.body.serviceData;
+
+		if (typeof serviceData === "string") {
+			try {
+				serviceData = JSON.parse(serviceData);
+			} catch (e) {}
+		}
+
+		if (!date) return res.status(400).json({ status: false, msg: "Please select a date!" });
+		if (!time) return res.status(400).json({ status: false, msg: "Please select a time!" });
+		if (!serviceData || !serviceData.name) return res.status(400).json({ status: false, msg: "Service details are required!" });
+		if (!req.file) return res.status(400).json({ status: false, msg: "Please upload payment screenshot proof!" });
+
+		const screenshotUrl = await imageUpload(req.file, `${req.user._id}_payment_proof_${Date.now()}`, "paymentProof");
+		if (!screenshotUrl) return res.status(500).json({ status: false, msg: "Failed to upload payment screenshot!" });
+
+		const GST = parseFloat(((serviceData.amount * 2) / 100).toFixed(2));
+		const totalAmount = parseFloat((serviceData.amount + GST).toFixed(2));
+
+		const currentDate = new Date(date);
+		currentDate.setMonth(currentDate.getMonth() + 1);
+		const expireDate = currentDate.toISOString().split("T")[0];
+
+		const serviceRecord = await serviceModel.create({
+			userId: req.user._id,
+			date,
+			expireDate,
+			time,
+			totalAmount,
+			serviceData,
+			merchantTransactionId: `MANUAL_${Date.now()}`,
+			isPaymentSuccess: false,
+			isActive: false,
+			paymentScreenshot: screenshotUrl,
+			paymentStatus: "PENDING",
+		});
+
+		return res.status(200).json({
+			status: true,
+			msg: "Payment details submitted successfully! Pending verification by Super Admin.",
+			data: serviceRecord,
+		});
+	} catch (error) {
+		console.error("Error in manualServicePayment:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = paymentController;

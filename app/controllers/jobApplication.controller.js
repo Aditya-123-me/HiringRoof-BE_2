@@ -560,7 +560,7 @@ jobApplication.all = async (req, res) => {
 	try {
 		const bodyData = req.body;
 
-		const application = await JobApplication.findOne({ _id: req.params });
+		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 
 		const applicationUserCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
 
@@ -873,7 +873,7 @@ jobApplication.getSelectedCandidates = async (req, res) => {
 // Actions
 jobApplication.shortlist = async (req, res, io) => {
 	try {
-		const application = await JobApplication.findOne({ _id: req.params });
+		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const userCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
@@ -913,7 +913,7 @@ jobApplication.shortlist = async (req, res, io) => {
 
 jobApplication.notSelected = async (req, res, io) => {
 	try {
-		const application = await JobApplication.findOne({ _id: req.params });
+		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const userCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
@@ -962,7 +962,7 @@ jobApplication.doInterviewSelect = async (req, res, io) => {
 
 		const time = convertTo12HourFormat(req.body.interviewsTime);
 
-		const application = await JobApplication.findOne({ _id: req.params });
+		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
@@ -1018,7 +1018,7 @@ jobApplication.doInterview2Select = async (req, res, io) => {
 
 		const time = convertTo12HourFormat(req.body.interviews2Time);
 
-		const application = await JobApplication.findOne({ _id: req.params });
+		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
@@ -1070,7 +1070,7 @@ jobApplication.selected = async (req, res, io) => {
 		const offerLetterDate = req.body.offerLetterDate;
 		const offerLetterTime = convertTo12HourFormat(req.body.offerLetterTime);
 
-		const application = await JobApplication.findOne({ _id: req.params });
+		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		// const userCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
