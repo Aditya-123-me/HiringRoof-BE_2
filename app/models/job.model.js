@@ -29,7 +29,7 @@ const jobSchema = mongoose.Schema(
 		companyLogo: {
 			type: String,
 			default:
-				"https://firebasestorage.googleapis.com/v0/b/hiringroof.appspot.com/o/static%20data%2FLogo.png?alt=media&token=fa7905e6-11ec-4352-af07-a1fbc200e5d8",
+				"https://drive.google.com/uc?export=download&id=1ybpi3L_-XDjHyZmiyIjg-ZZ5S-1jk3MU",
 		},
 		isSaved: { type: Boolean, default: false },
 		isApplied: { type: Boolean, default: false },

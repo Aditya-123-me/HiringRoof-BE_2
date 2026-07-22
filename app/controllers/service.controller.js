@@ -59,7 +59,7 @@ service.myServices = async (req, res) => {
 		);
 
 		if (status === "all") {
-			data = dataAll;
+			data = dataAll; 
 			dataCount = dataCountAll;
 		} else if (status === "active") {
 			data = await serviceModel.find({ userId, isActive: true }).sort({ createdAt: -1 }).populate({

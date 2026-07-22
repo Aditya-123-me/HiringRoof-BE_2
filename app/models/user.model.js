@@ -4,6 +4,8 @@ const userSchema = mongoose.Schema(
 	{
 		phone: { type: String, unique: true },
 		alternativePhone: { type: String, default: "" },
+		alternativePhone2: { type: String, default: "" },
+		address: { type: String, default: "" },
 		userType: {
 			type: String,
 			required: true,
@@ -16,7 +18,7 @@ const userSchema = mongoose.Schema(
 		profileImage: {
 			type: String,
 			default:
-				"https://firebasestorage.googleapis.com/v0/b/hiringroof.appspot.com/o/static%20data%2FAvtar.png?alt=media&token=5a84bf05-8bec-4f7b-b9f3-deb8205b8cef",
+				"https://drive.google.com/uc?export=download&id=1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
 		},
 		location: { type: String, default: "" },
 		gender: { type: String, default: "" },
@@ -40,8 +42,12 @@ const userSchema = mongoose.Schema(
 		experience: { type: String, default: "" },
 		resume: { type: String, default: "" },
 		resumeFileName: { type: String, default: "" },
+		resumeSize: { type: String, default: "" },
+		resumePages: { type: Number, default: 0 },
 		letter: { type: String, default: "" },
 		letterFileName: { type: String, default: "" },
+		letterSize: { type: String, default: "" },
+		letterPages: { type: Number, default: 0 },
 		isHired: { type: Boolean, default: false },
 		projects: [
 			{
@@ -65,7 +71,7 @@ const userSchema = mongoose.Schema(
 		companyLogo: {
 			type: String,
 			default:
-				"https://firebasestorage.googleapis.com/v0/b/hiringroof.appspot.com/o/static%20data%2FLogo.png?alt=media&token=fa7905e6-11ec-4352-af07-a1fbc200e5d8",
+				"https://drive.google.com/uc?export=download&id=1ybpi3L_-XDjHyZmiyIjg-ZZ5S-1jk3MU",
 		},
 		companyType: { type: String, default: "" },
 		companyEmail: { type: String, default: "" },

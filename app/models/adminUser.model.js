@@ -8,7 +8,7 @@ const adminUserSchema = mongoose.Schema(
 		profileImage: {
 			type: String,
 			default:
-				"https://firebasestorage.googleapis.com/v0/b/hiringroof.appspot.com/o/static%20data%2FAvtar.png?alt=media&token=5a84bf05-8bec-4f7b-b9f3-deb8205b8cef",
+				"https://drive.google.com/uc?export=download&id=1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
 		},
 		type: { type: String, required: true, enum: ["admin", "hr"] },
 		number: { type: String, default: "", required: true },

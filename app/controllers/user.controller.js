@@ -90,7 +90,7 @@ userController.verify = async (req, res, io) => {
 		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone or OTP is wrong, Please try again !!" });
 
 		let update;
-		if (userType.trim())
+		if (userType && userType.trim())
 			update = await User.findByIdAndUpdate(
 				findNumber._id,
 				{ $set: { otp: "", userType, profileComplete: 10 } },
@@ -101,7 +101,7 @@ userController.verify = async (req, res, io) => {
 		const token = jwt.sign({ _id: update._id }, JWT_SECRET, {
 			expiresIn: "60d",
 		});
-		if (userType.trim()) {
+		if (userType && userType.trim()) {
 			const data = await createNotification({
 				senderId: update._id,
 				receiverId: update._id,
@@ -285,6 +285,8 @@ userController.update = async (req, res, io) => {
 		if (req.body.expectationPay) bodyData.expectationPay = req.body.expectationPay;
 		if (req.body.experience) bodyData.experience = req.body.experience;
 		if (req.body.alternativePhone) bodyData.alternativePhone = req.body.alternativePhone;
+		if (req.body.alternativePhone2) bodyData.alternativePhone2 = req.body.alternativePhone2;
+		if (req.body.address) bodyData.address = req.body.address;
 		if (req.body.gender) bodyData.gender = req.body.gender;
 		if (req.body.dob) bodyData.dob = req.body.dob;
 		if (req.body.about) bodyData.about = req.body.about;
@@ -345,6 +347,15 @@ userController.update = async (req, res, io) => {
 				else {
 					bodyData.resume = resumeUrl;
 					bodyData.resumeFileName = resume.originalname;
+					bodyData.resumeSize = (resume.size / (1024 * 1024)).toFixed(2) + " MB";
+					
+					try {
+						const pdfParse = require("pdf-parse");
+						const parsed = await pdfParse(resume.buffer);
+						bodyData.resumePages = parsed.numpages;
+					} catch (e) {
+						bodyData.resumePages = 0;
+					}
 				}
 			}
 		}
@@ -381,6 +392,15 @@ userController.update = async (req, res, io) => {
 				else {
 					bodyData.letter = letterUrl;
 					bodyData.letterFileName = letter.originalname;
+					bodyData.letterSize = (letter.size / (1024 * 1024)).toFixed(2) + " MB";
+
+					try {
+						const pdfParse = require("pdf-parse");
+						const parsed = await pdfParse(letter.buffer);
+						bodyData.letterPages = parsed.numpages;
+					} catch (e) {
+						bodyData.letterPages = 0;
+					}
 				}
 			}
 		}

@@ -1464,10 +1464,14 @@ jobApplication.getInterviewsBySingleDate = async (req, res) => {
             });
 
             // Attach HR details to each interview
-            const interviewsWithHRDetails = interviewsBySingleDate.map((interview) => ({
-                interview,
-                hrDetails: { userId: hr.userId, type: hr.type, profileImage: hr.profileImage, name: hr.name, _id: hr._id },
-            }));
+            const interviewsWithHRDetails = interviewsBySingleDate.map((interview) => {
+                const interviewObj = interview.toObject ? interview.toObject() : interview;
+                return {
+                    ...interviewObj,
+                    interview: interviewObj,
+                    hrDetails: { userId: hr.userId, type: hr.type, profileImage: hr.profileImage, name: hr.name, _id: hr._id },
+                };
+            });
 
             // Push the interviews with HR details to the allInterviews array
             allInterviews.push(...interviewsWithHRDetails);
