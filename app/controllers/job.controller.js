@@ -823,4 +823,8 @@ jobController.singleUpload = async (req, res) => {
 	}
 };
 
+jobController.createWithAddon = async(req,res)=>{
+	
+}
+
 module.exports = jobController;
