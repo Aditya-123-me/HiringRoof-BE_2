@@ -972,4 +972,35 @@ jobController.createWithAddon = async (req, res, io) => {
 	}
 };
 
+jobController.myPendingAddons = async (req, res) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const status = req.query.status || "PENDING";
+
+		const payments = await serviceModel.find({
+			userId: req.user._id,
+			paymentStatus: status,
+			merchantTransactionId: { $regex: /^MANUAL_JOB_ADDON_/ }
+		})
+		.sort({ createdAt: -1 })
+		.lean();
+
+		const results = await Promise.all(
+			payments.map(async (payment) => {
+				const jobId = payment.merchantTransactionId.replace("MANUAL_JOB_ADDON_", "");
+				const jobDetails = await Job.findById(jobId).lean();
+				return {
+					...payment,
+					jobDetails
+				};
+			})
+		);
+
+		return res.status(200).json({ status: true, count: results.length, data: results });
+	} catch (error) {
+		console.error("Error in myPendingAddons:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = jobController;

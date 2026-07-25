@@ -25,6 +25,7 @@ module.exports = (router, io) => {
 	router.delete("/job/delete/:_id", authorization, jobController.delete);
 
 	router.get("/job/myJobs/:page", authorization, jobController.myJobs);
+	router.get("/job/my-pending-addons", authorization, jobController.myPendingAddons);
 
 	router.put("/job/close/:id", authorization, (req, res) => jobController.changeActiveState(req, res, io));
 
