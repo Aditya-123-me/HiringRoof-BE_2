@@ -823,8 +823,153 @@ jobController.singleUpload = async (req, res) => {
 	}
 };
 
-jobController.createWithAddon = async(req,res)=>{
-	
-}
+jobController.createWithAddon = async (req, res, io) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const ownUser = await userModel.findOne({ _id: req.user._id });
+		if (!ownUser) return res.status(404).json({ status: false, msg: "User record not found!" });
+
+		// Parse job data from form field
+		let parsedJobData = {};
+		if (req.body.jobData) {
+			parsedJobData = typeof req.body.jobData === "string" ? JSON.parse(req.body.jobData) : req.body.jobData;
+		}
+
+		if (!parsedJobData.serviceType || !parsedJobData.addOn) {
+			return res.status(400).json({ status: false, msg: "Service type and addOn details are required for addon posting!" });
+		}
+		if (!req.files || !req.files["screenshot"]) {
+			return res.status(400).json({ status: false, msg: "Manual payment proof screenshot is required!" });
+		}
+
+		// Upload payment screenshot
+		const screenshotFile = req.files["screenshot"][0];
+		const screenshotUrl = await imageUpload(screenshotFile, `${req.user._id}_job_addon_proof_${Date.now()}`, "paymentProof");
+		if (!screenshotUrl) return res.status(500).json({ status: false, msg: "Failed to upload payment screenshot!" });
+
+		const bodyData = {};
+		bodyData.userId = req.user._id;
+		bodyData.jobTittle = parsedJobData.jobTittle;
+		bodyData.jobType = parsedJobData.jobType;
+		bodyData.workType = parsedJobData.workType;
+		bodyData.timePeriod = parsedJobData.timePeriod || "Asia/Kolkata";
+		bodyData.note = parsedJobData.note;
+		bodyData.pay = parsedJobData.pay || 0;
+		bodyData.payType = parsedJobData.payType;
+		bodyData.location = parsedJobData.location;
+		bodyData.companyName = parsedJobData.companyName || ownUser.companyName;
+		
+		if (parsedJobData.stream) {
+			bodyData.stream = Array.isArray(parsedJobData.stream) ? parsedJobData.stream : JSON.parse(parsedJobData.stream);
+		}
+		if (parsedJobData.experience) bodyData.experience = parsedJobData.experience;
+		if (parsedJobData.availability) bodyData.availability = parsedJobData.availability;
+		bodyData.serviceType = parsedJobData.serviceType;
+		if (parsedJobData.vacancies) bodyData.vacancies = parsedJobData.vacancies;
+
+		if (bodyData.companyName) {
+			let shortName = "";
+			const cn = bodyData.companyName.split(" ");
+			if (cn.length > 1) cn.map((data) => (shortName += data[0].toUpperCase()));
+			else shortName = cn[0].slice(0, 3).toUpperCase();
+			bodyData.companyShortName = shortName;
+		}
+
+		bodyData.addOn = parsedJobData.addOn;
+		
+		if (parsedJobData.skills) {
+			if (typeof parsedJobData.skills === "string") {
+				try {
+					bodyData.skills = JSON.parse(parsedJobData.skills);
+				} catch (e) {
+					bodyData.skills = parsedJobData.skills.split(",").map((s) => s.trim()).filter(Boolean);
+				}
+			} else if (Array.isArray(parsedJobData.skills)) {
+				bodyData.skills = parsedJobData.skills;
+			}
+		}
+
+		if (parsedJobData.skillDetails) {
+			try {
+				const extractData = extractSkillSub(typeof parsedJobData.skillDetails === "string" ? JSON.parse(parsedJobData.skillDetails) : parsedJobData.skillDetails);
+				bodyData.skillDetails = extractData.mergedSkillDetails;
+				bodyData.skillSubCategories = extractData.skillSubCategories;
+				if (!bodyData.skills) bodyData.skills = extractData.skills;
+			} catch (e) {
+				console.log("Job skill details parsing skipped");
+			}
+		}
+
+		// Tags
+		const regex = /#(\w+)/g;
+		const tags = [];
+		let match;
+		while ((match = regex.exec(bodyData.note || "")) !== null) tags.push(match[1]);
+		bodyData.tags = tags;
+
+		// Handle company logo file if provided
+		if (req.files && req.files["companyLogo"]) {
+			const logoFile = req.files["companyLogo"][0];
+			const imgUrl = await imageUpload(logoFile, `${req.user._id}_${Date.now()}_CompanyLogo`, "companyLogo");
+			if (imgUrl) bodyData.companyLogo = imgUrl;
+		}
+		if (!bodyData.companyLogo) {
+			bodyData.companyLogo = ownUser.companyLogo;
+		}
+
+		// Addon Job is created initially hidden and inactive
+		bodyData.isActive = false;
+		bodyData.isPaymentSuccess = false;
+
+		const jobRecord = await Job.create(bodyData);
+
+		// Calculate total amount for payment entry
+		const GST = parseFloat(((bodyData.addOn.price * 2) / 100).toFixed(2));
+		const totalAmount = parseFloat((bodyData.addOn.price + GST).toFixed(2));
+
+		const date = new Date().toISOString().split("T")[0];
+		const nextMonthDate = new Date();
+		nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
+		const expireDate = nextMonthDate.toISOString().split("T")[0];
+
+		// Create pending service/payment record linked to the job
+		const serviceRecord = await serviceModel.create({
+			userId: req.user._id,
+			date,
+			expireDate,
+			time: new Date().toLocaleTimeString("en-US", { hour12: false }),
+			totalAmount,
+			serviceData: {
+				name: "Job Addon Payment",
+				title: bodyData.serviceType,
+				amount: bodyData.addOn.price,
+				jobId: jobRecord._id,
+			},
+			merchantTransactionId: `MANUAL_JOB_ADDON_${jobRecord._id}`,
+			isPaymentSuccess: false,
+			isActive: false,
+			paymentScreenshot: screenshotUrl,
+			paymentStatus: "PENDING",
+		});
+
+		// Link transaction reference to Job model
+		jobRecord.merchantTransactionId = serviceRecord.merchantTransactionId;
+		await jobRecord.save();
+
+		// Increment recruiter total posted jobs stats
+		ownUser.totalJobs = ownUser.totalJobs + 1;
+		await ownUser.save();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Job with addon posted successfully! Verification is pending from Super Admin.",
+			job: jobRecord,
+			service: serviceRecord,
+		});
+	} catch (error) {
+		console.error("Error in createWithAddon:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
 
 module.exports = jobController;

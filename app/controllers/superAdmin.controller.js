@@ -295,17 +295,33 @@ superAdmin.getManualPayments = async (req, res) => {
 superAdmin.verifyManualPayment = async (req, res) => {
 	try {
 		const serviceModel = require("../models/service.model");
+		const jobModel = require("../models/job.model");
 		const { id } = req.params;
 		const { action, rejectionReason } = req.body;
 
 		const service = await serviceModel.findById(id);
 		if (!service) return res.status(404).json({ status: false, msg: "Payment record not found!" });
 
+		// Check if this service is a job addon payment
+		let isJobAddon = false;
+		let jobId = null;
+		if (service.merchantTransactionId && service.merchantTransactionId.startsWith("MANUAL_JOB_ADDON_")) {
+			isJobAddon = true;
+			jobId = service.merchantTransactionId.replace("MANUAL_JOB_ADDON_", "");
+		}
+
 		if (action === "APPROVE") {
 			service.paymentStatus = "APPROVED";
 			service.isPaymentSuccess = true;
 			service.isActive = true;
 			await service.save();
+
+			if (isJobAddon && jobId) {
+				await jobModel.findByIdAndUpdate(jobId, {
+					$set: { isPaymentSuccess: true, isActive: true }
+				});
+			}
+
 			return res.status(200).json({ status: true, msg: "Manual payment approved successfully!", data: service });
 		} else if (action === "REJECT") {
 			service.paymentStatus = "REJECTED";
@@ -313,10 +329,50 @@ superAdmin.verifyManualPayment = async (req, res) => {
 			service.isActive = false;
 			service.rejectionReason = rejectionReason || "Payment verification failed";
 			await service.save();
+
+			if (isJobAddon && jobId) {
+				await jobModel.findByIdAndUpdate(jobId, {
+					$set: { isPaymentSuccess: false, isActive: false }
+				});
+			}
+
 			return res.status(200).json({ status: true, msg: "Manual payment rejected!", data: service });
 		} else {
 			return res.status(400).json({ status: false, msg: "Invalid action! Use APPROVE or REJECT." });
 		}
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+superAdmin.getPendingAddonJobs = async (req, res) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const jobModel = require("../models/job.model");
+		
+		const status = req.query.status || "PENDING";
+		const payments = await serviceModel.find({
+			paymentStatus: status,
+			merchantTransactionId: { $regex: /^MANUAL_JOB_ADDON_/ }
+		})
+		.populate("userId", "name email phone profileImage userType")
+		.sort({ createdAt: -1 })
+		.lean();
+
+		// Fetch and attach job details for each pending payment
+		const results = await Promise.all(
+			payments.map(async (payment) => {
+				const jobId = payment.merchantTransactionId.replace("MANUAL_JOB_ADDON_", "");
+				const jobDetails = await jobModel.findById(jobId).lean();
+				return {
+					...payment,
+					jobDetails
+				};
+			})
+		);
+
+		return res.status(200).json({ status: true, count: results.length, data: results });
 	} catch (error) {
 		console.error(error);
 		return res.status(500).json({ status: false, msg: error.message });

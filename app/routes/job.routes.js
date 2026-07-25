@@ -7,6 +7,11 @@ const adminAuthorization = require("../middleware/adminAuthorization.middleware"
 module.exports = (router, io) => {
 	router.put("/job/createUpdate", authorization, upload.single("companyLogo"), (req, res) => jobController.post(req, res, io));
 
+	router.post("/job/create-with-addon", authorization, upload.fields([
+		{ name: "screenshot", maxCount: 1 },
+		{ name: "companyLogo", maxCount: 1 }
+	]), (req, res) => jobController.createWithAddon(req, res, io));
+
 	router.get("/job/addons-jobs", authorization2nd, jobController.getAddOnJobs);
 	
 	router.get("/job/all", jobController.getJobs);
