@@ -19,6 +19,7 @@ module.exports = (router, io) => {
 	router.get("/job/all-after-login", authorization, jobController.getJobsAuth);
 
 	router.get("/job/:id", jobController.getOneJob);
+	router.get("/job/generate-jd-pdf/:id", jobController.generateJdPdf);
 
 	router.get("/job/search/:query", authorization2nd, jobController.search);
 

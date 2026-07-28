@@ -928,9 +928,9 @@ jobController.createWithAddon = async (req, res, io) => {
 		const totalAmount = parseFloat((bodyData.addOn.price + GST).toFixed(2));
 
 		const date = new Date().toISOString().split("T")[0];
-		const nextMonthDate = new Date();
-		nextMonthDate.setMonth(nextMonthDate.getMonth() + 1);
-		const expireDate = nextMonthDate.toISOString().split("T")[0];
+		const addonExpireDate = new Date();
+		addonExpireDate.setDate(addonExpireDate.getDate() + 10); // 10 days fallback validity
+		const expireDate = addonExpireDate.toISOString().split("T")[0];
 
 		// Create pending service/payment record linked to the job
 		const serviceRecord = await serviceModel.create({
@@ -1000,6 +1000,137 @@ jobController.myPendingAddons = async (req, res) => {
 	} catch (error) {
 		console.error("Error in myPendingAddons:", error);
 		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+jobController.generateJdPdf = async (req, res) => {
+	try {
+		const { id } = req.params;
+		const job = await Job.findById(id).lean();
+		if (!job) return res.status(404).json({ status: false, msg: "Job description not found!" });
+
+		const PDFDocument = require("pdfkit-table");
+		const axios = require("axios");
+
+		const doc = new PDFDocument({ margin: 50, size: "A4" });
+
+		// Set response headers for PDF stream
+		res.setHeader("Content-Type", "application/pdf");
+		res.setHeader("Content-Disposition", `inline; filename="JD_${job.companyName.replace(/\s+/g, "_")}.pdf"`);
+		doc.pipe(res);
+
+		// Draw background watermark (Hiring Roof logo/text watermark) - Enlarged & Violet
+		doc.save()
+		   .opacity(0.12)
+		   .font("Helvetica-Bold")
+		   .fontSize(72)
+		   .fillColor("#7E3FF3")
+		   .translate(300, 420)
+		   .rotate(-45)
+		   .text("HIRING ROOF", -250, 0, { align: "center", width: 500 })
+		   .restore();
+
+		// Violet Style Top Banner Strip
+		doc.rect(0, 0, 595, 12).fill("#7E3FF3");
+
+		// Header - Left Side Logo
+		let logoBuffer = null;
+		if (job.companyLogo && !job.companyLogo.includes("drive.google.com")) {
+			try {
+				const logoRes = await axios.get(job.companyLogo, { responseType: "arraybuffer", timeout: 3000 });
+				logoBuffer = Buffer.from(logoRes.data);
+			} catch (e) {
+				console.log("Failed to download remote company logo:", e.message);
+			}
+		}
+
+		if (!logoBuffer) {
+			try {
+				const fs = require("fs");
+				const path = require("path");
+				const fallbackPath = path.join(__dirname, "../../public/image.png");
+				if (fs.existsSync(fallbackPath)) {
+					logoBuffer = fs.readFileSync(fallbackPath);
+				}
+			} catch (e) {
+				console.log("Failed to read fallback logo:", e.message);
+			}
+		}
+
+		doc.y = 20;
+		if (logoBuffer) {
+			// Compact size logo to fit letterhead properly without squeezing
+			doc.image(logoBuffer, 40, doc.y, { fit: [140, 45] });
+			doc.y += 50;
+		} else {
+			doc.y += 15;
+		}
+
+		// Divider Line below Header
+		doc.strokeColor("#E0E0E0").lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
+		doc.y += 25;
+
+		const mainStartY = doc.y;
+
+		// --- 2-Column Grid Layout (Inspire from SVR template) ---
+		
+		// 1. Sidebar (Width: 32% ~ 170px)
+		doc.fontSize(10.5).fillColor("#222222").font("Helvetica-Bold").text(job.companyName || "HV Tech Labs", 40, mainStartY);
+		doc.fontSize(9.5).fillColor("#666666").font("Helvetica").text(`Location: ${job.location}`, 40, doc.y + 4);
+
+		doc.fontSize(9.5).fillColor("#888888").font("Helvetica-Bold").text("DETAILS:", 40, doc.y + 20);
+		doc.fontSize(9.5).fillColor("#666666").font("Helvetica")
+		   .text(`Role: ${job.workType || "Full-Time"}`, 40, doc.y + 4)
+		   .text(`Policy: ${job.jobType === "wfh" ? "Remote" : "On-site"}`)
+		   .text(`Salary: Rs. ${job.pay} / ${job.payType || "mo"}`);
+
+		// Bottom Left Contacts inside Sidebar (Pushed to bottom of page: y = 680)
+		const addressY = 680;
+		const jobDetailsUrl = `https://www.hiringroof.com/job-card?id=${job._id}`;
+		const supportMeetUrl = "https://meet.google.com/xik-jmne-cqq";
+
+		doc.fontSize(8.5).fillColor("#555555").font("Helvetica-Bold")
+		   .text("View Job Post:", 40, addressY)
+		   .font("Helvetica").fillColor("#7E3FF3")
+		   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true })
+		   .moveDown(0.8)
+		   .font("Helvetica-Bold").fillColor("#555555")
+		   .text("Meet Support:", 40, doc.y)
+		   .font("Helvetica").fillColor("#3B82F6")
+		   .text(supportMeetUrl, { link: supportMeetUrl, underline: true });
+
+		// 2. Letter Body Column (Width: 68% ~ starting at x = 220)
+		const bodyX = 220;
+		doc.fontSize(16).fillColor("#222222").font("Helvetica-Bold").text(job.jobTittle || "Job Description", bodyX, mainStartY);
+		doc.fontSize(9).fillColor("#888888").font("Helvetica-Oblique").text(`Posted on ${new Date(job.createdAt || Date.now()).toLocaleDateString("en-IN")}`, bodyX, doc.y + 3);
+		
+		doc.fontSize(10.5).fillColor("#444444").font("Helvetica").text("About Company:", bodyX, doc.y + 20);
+		doc.fontSize(10).fillColor("#555555").font("Helvetica-Oblique").text(
+			"We are leading recruiters dedicated to connecting top-tier talent with ideal career paths, helping applicants match and establish stable growth directions in standard technical segments.",
+			bodyX, doc.y + 5, { width: 335, align: "justify", lineGap: 3 }
+		);
+
+		doc.fontSize(10.5).fillColor("#444444").font("Helvetica").text("Job Summary:", bodyX, doc.y + 15);
+		doc.fontSize(10).fillColor("#555555").font("Helvetica").text(
+			job.note || "No custom job description notes provided.",
+			bodyX, doc.y + 5, { width: 335, align: "justify", lineGap: 3 }
+		);
+
+		if (job.skills && job.skills.length > 0) {
+			doc.fontSize(10.5).fillColor("#444444").font("Helvetica").text("Required Skills & Knowledge:", bodyX, doc.y + 15);
+			doc.fontSize(10).fillColor("#555555").font("Helvetica");
+			doc.y += 5;
+			job.skills.forEach((skill) => {
+				doc.fillColor("#7E3FF3").text("  •  ", bodyX, doc.y, { continued: true }).fillColor("#555555").text(skill);
+			});
+		}
+
+		doc.end();
+	} catch (error) {
+		console.error("Error in generateJdPdf:", error);
+		if (!res.headersSent) {
+			return res.status(500).json({ status: false, msg: error.message });
+		}
 	}
 };
 

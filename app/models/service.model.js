@@ -18,6 +18,11 @@ const serviceSchema = mongoose.Schema(
 			default: "PENDING",
 		},
 		rejectionReason: { type: String, default: "" },
+		rating: { type: Number, default: 0 },
+		reviewText: { type: String, default: "" },
+		workDone: { type: [String], default: [] },
+		workPending: { type: [String], default: [] },
+		progressPercentage: { type: Number, default: 0 }
 	},
 	{ timestamps: true }
 );

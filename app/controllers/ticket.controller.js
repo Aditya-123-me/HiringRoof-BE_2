@@ -1,14 +1,24 @@
 const TicketModel = require("../models/ticket.model");
-
+ 
 const ticket = {};
 
 ticket.create = async (req, res, io) => {
 	try {
+		const { desc, name, email, phone } = req.body;
+		
+		// Validation rule: either phone or email must be provided
+		if (!email && !phone) {
+			return res.status(400).json({ status: false, msg: "Either Email or Phone number must be provided to raise a ticket!" });
+		}
+
 		const ticketCount = await TicketModel.countDocuments({ userId: req.user._id });
 
 		const bodyData = {};
 		bodyData.userId = req.user._id;
-		bodyData.desc = req.body.desc;
+		bodyData.desc = desc;
+		bodyData.name = name || "";
+		bodyData.email = email || "";
+		bodyData.phone = phone || "";
 		bodyData.ticketNo = Number(ticketCount + 1);
 
 		const newTicket = await TicketModel.create(bodyData);

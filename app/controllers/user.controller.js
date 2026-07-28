@@ -15,13 +15,14 @@ const userController = {};
 
 userController.addRescheduleRequest = async (req, res) => {
 	try {
-		const { _id, newDate, newTime, reason, interviewType, requestedBy } = req.body;
+		const targetId = req.body._id || req.body.applicationId;
+		const { newDate, newTime, reason, interviewType, requestedBy } = req.body;
 
-		if (!_id || !mongoose.Types.ObjectId.isValid(_id)) {
+		if (!targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
 			return res.status(400).json({ status: false, msg: "Invalid Job Application ID" });
 		}
 
-		const jobApplication = await JobApplication.findById(_id);
+		const jobApplication = await JobApplication.findById(targetId);
 		if (!jobApplication) {
 			return res.status(404).json({ status: false, msg: "Job Application not found" });
 		}
