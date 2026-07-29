@@ -696,6 +696,7 @@ jobController.bulkUpload = async (req, res) => {
 			if (obj.skills) obj.skills = obj.skills.split(",").map((skill) => skill.trim());
 
 			obj.userType = "jobSeeker";
+			obj.registrationSource = "bulk";
 			return obj;
 		});
 

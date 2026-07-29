@@ -97,6 +97,7 @@ const userSchema = mongoose.Schema(
 		callBy: { type: String, default: "" },
 		feedback: { type: String, default: "" },
 		source: { type: String, default: "" },
+		registrationSource: { type: String, default: "self", enum: ["self", "bulk"] },
 	},
 	{ timestamps: true }
 );
