@@ -779,10 +779,10 @@ jobController.singleUpload = async (req, res) => {
 		});
 
 		if (!application) {
-			// Create new job application
+			// Create new job application linked to the recruiter who created the job
 			application = await JobApplication.create({
 				applicantId: user._id,
-				applierId: posterId,
+				applierId: job.userId,
 				jobId,
 			});
 		}
