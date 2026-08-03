@@ -661,7 +661,7 @@ jobController.blockUnblockJob = async (req, res) => {
 		console.error(error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
-};
+}; 
 
 jobController.bulkUpload = async (req, res) => {
 	const { jobId } = req.body;
@@ -688,12 +688,28 @@ jobController.bulkUpload = async (req, res) => {
 				obj[header] = row[index] || "";
 			});
 
-			// Format 'entryDate' and 'dob' if they are in Excel serial date format
-			if (obj.entryDate) obj.entryDate = moment(XLSX.SSF.parse_date_code(obj.entryDate)).format("YYYY-MM-DD");
-			if (obj.dob) obj.dob = moment(XLSX.SSF.parse_date_code(obj.dob)).format("YYYY-MM-DD");
+			// Format 'entryDate' and 'dob' if they are in Excel serial date format (number)
+			if (obj.entryDate) {
+				if (typeof obj.entryDate === "number") {
+					obj.entryDate = moment(XLSX.SSF.parse_date_code(obj.entryDate)).format("YYYY-MM-DD");
+				}
+				// else keep as-is (already a string date)
+			}
+			if (obj.dob) {
+				if (typeof obj.dob === "number") {
+					obj.dob = moment(XLSX.SSF.parse_date_code(obj.dob)).format("YYYY-MM-DD");
+				}
+				// else keep as-is
+			}
 
 			// Convert 'skills' from comma-separated string to an array
-			if (obj.skills) obj.skills = obj.skills.split(",").map((skill) => skill.trim());
+			if (obj.skills) {
+				if (typeof obj.skills === "string") {
+					obj.skills = obj.skills.split(",").map((skill) => skill.trim()).filter(Boolean);
+				} else if (!Array.isArray(obj.skills)) {
+					obj.skills = [String(obj.skills)];
+				}
+			}
 
 			obj.userType = "jobSeeker";
 			obj.registrationSource = "bulk";
@@ -760,7 +776,7 @@ jobController.bulkUpload = async (req, res) => {
 jobController.singleUpload = async (req, res) => {
 	const { jobId, userData } = req.body;
 	const posterId = req.user._id; // Get posterId from authenticated user
-
+ 
 	try {
 		const job = await Job.findById(jobId);
 		if (!job) return res.status(404).json({ status: false, msg: "No job found !!" });
