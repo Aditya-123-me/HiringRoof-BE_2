@@ -711,6 +711,14 @@ jobController.bulkUpload = async (req, res) => {
 				}
 			}
 
+			// Parse 'projects' and 'education' from JSON string if needed
+			if (obj.projects && typeof obj.projects === "string") {
+				try { obj.projects = JSON.parse(obj.projects); } catch { obj.projects = []; }
+			}
+			if (obj.education && typeof obj.education === "string") {
+				try { obj.education = JSON.parse(obj.education); } catch { obj.education = []; }
+			}
+
 			obj.userType = "jobSeeker";
 			obj.registrationSource = "bulk";
 			return obj;
