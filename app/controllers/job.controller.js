@@ -10,6 +10,7 @@ const extractSkillSub = require("../util/functions");
 const User = require("../models/user.model");
 const moment = require("moment");
 const Resource = require("../models/resource.model");
+const { createMeetLink } = require("../util/googleCalendar.util");
 
 const XLSX = require("xlsx");
 const fs = require("fs");
