@@ -314,13 +314,28 @@ superAdmin.verifyManualPayment = async (req, res) => {
 			service.paymentStatus = "APPROVED";
 			service.isPaymentSuccess = true;
 			service.isActive = true;
-			await service.save();
 
 			if (isJobAddon && jobId) {
+				const approvalDate = new Date();
+				const serviceDateStr = approvalDate.toISOString().split("T")[0];
+
+				const jobExpireDate = new Date();
+				jobExpireDate.setDate(jobExpireDate.getDate() + 1); // 1 day validity/expiry
+				const jobExpireStr = jobExpireDate.toISOString().split("T")[0];
+
 				await jobModel.findByIdAndUpdate(jobId, {
-					$set: { isPaymentSuccess: true, isActive: true }
+					$set: { 
+						isPaymentSuccess: true, 
+						isActive: true,
+						expireDate: jobExpireStr
+					}
 				});
+
+				// Update service date & expireDate to align with active window
+				service.date = serviceDateStr;
+				service.expireDate = jobExpireStr;
 			}
+			await service.save();
 
 			return res.status(200).json({ status: true, msg: "Manual payment approved successfully!", data: service });
 		} else if (action === "REJECT") {

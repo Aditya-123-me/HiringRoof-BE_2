@@ -65,7 +65,7 @@ const imageUpload = async (imageData, name, folderName) => {
 		});
 
 		// Return direct download/view link
-		return `https://drive.google.com/uc?export=download&id=${fileId}`;
+		return `https://lh3.googleusercontent.com/d/${fileId}`;
 	} catch (error) {
 		console.error("Error uploading to Google Drive:", error);
 		throw error;
@@ -85,14 +85,21 @@ const deleteFromFirebase = async (url) => {
 		return true;
 	}
 
-	// If it is not a Google Drive URL, skip deletion and return true
-	if (!url.includes("drive.google.com")) {
+	// If it is not a Google Drive or Google UserContent URL, skip deletion and return true
+	if (!url.includes("drive.google.com") && !url.includes("lh3.googleusercontent.com")) {
 		return true;
 	}
 
 	try {
-		const match = url.match(/[?&]id=([^&#]+)/);
-		const fileId = match ? match[1] : null;
+		let fileId = null;
+		if (url.includes("lh3.googleusercontent.com")) {
+			const parts = url.split("/");
+			fileId = parts[parts.length - 1];
+		} else {
+			const match = url.match(/[?&]id=([^&#]+)/);
+			fileId = match ? match[1] : null;
+		}
+
 		if (!fileId) return true;
 
 		await drive.files.delete({ fileId });

@@ -30,6 +30,9 @@ service.pay = async (req, res) => {
 
 service.myServices = async (req, res) => {
 	try {
+		const expireJobsAndServices = require("../util/expireJobsAndServices");
+		await expireJobsAndServices();
+
 		const userId = req.user._id;
 		const status = req.query.status;
 

@@ -18,7 +18,7 @@ const userSchema = mongoose.Schema(
 		profileImage: {
 			type: String,
 			default:
-				"https://drive.google.com/uc?export=download&id=1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
+				"https://lh3.googleusercontent.com/d/1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
 		},
 		location: { type: String, default: "" },
 		gender: { type: String, default: "" },
@@ -71,7 +71,7 @@ const userSchema = mongoose.Schema(
 		companyLogo: {
 			type: String,
 			default:
-				"https://drive.google.com/uc?export=download&id=1ybpi3L_-XDjHyZmiyIjg-ZZ5S-1jk3MU",
+				"https://lh3.googleusercontent.com/d/1ybpi3L_-XDjHyZmiyIjg-ZZ5S-1jk3MU",
 		},
 		companyType: { type: String, default: "" },
 		companyEmail: { type: String, default: "" },

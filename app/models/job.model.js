@@ -29,7 +29,7 @@ const jobSchema = mongoose.Schema(
 		companyLogo: {
 			type: String,
 			default:
-				"https://drive.google.com/uc?export=download&id=1ybpi3L_-XDjHyZmiyIjg-ZZ5S-1jk3MU",
+				"https://lh3.googleusercontent.com/d/1ybpi3L_-XDjHyZmiyIjg-ZZ5S-1jk3MU",
 		},
 		isSaved: { type: Boolean, default: false },
 		isApplied: { type: Boolean, default: false },
@@ -45,6 +45,7 @@ const jobSchema = mongoose.Schema(
 		addOn: { type: Object, default: null },
 		isPaymentSuccess: { type: Boolean, default: false },
 		merchantTransactionId: { type: String, default: "" },
+		expireDate: { type: String, default: "" },
 	},
 	{ timestamps: true }
 );

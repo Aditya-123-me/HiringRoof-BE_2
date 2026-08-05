@@ -28,8 +28,10 @@ module.exports = (io) => {
 			}
 			io.emit(`notifications_${data.receiverId._id}`, data);
 		});
+	});
 
-    });
-    
-
+	const expireJobs = schedule.scheduleJob("0 * * * *", async () => {
+		const expireJobsAndServices = require("./expireJobsAndServices");
+		await expireJobsAndServices();
+	});
 };

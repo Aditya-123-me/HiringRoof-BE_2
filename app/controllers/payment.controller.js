@@ -32,7 +32,7 @@ const readFilePromise = (filePath) => {
 		});
 	});
 };
-
+  
 paymentController.jobPostPayment = async (req, res, io) => {
 	try {
 		const jobId = req.params.id;

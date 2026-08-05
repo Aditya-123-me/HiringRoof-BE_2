@@ -159,6 +159,9 @@ jobController.post = async (req, res, io) => {
 
 jobController.getAddOnJobs = async (req, res) => {
 	try {
+		const expireJobsAndServices = require("../util/expireJobsAndServices");
+		await expireJobsAndServices();
+
 		const page = req.query.page >= 1 ? req.query.page : 1;
 		const limit = req.query.limit >= 1 ? req.query.limit : 6;
 		const skip = limit * (page - 1);
@@ -218,6 +221,9 @@ jobController.getAddOnJobs = async (req, res) => {
 
 jobController.getJobs = async (req, res) => {
 	try {
+		const expireJobsAndServices = require("../util/expireJobsAndServices");
+		await expireJobsAndServices();
+
 		const page = req.query.page >= 1 ? req.query.page : 1;
 		const limit = req.query.limit >= 1 ? req.query.limit : 6;
 		const skip = limit * (page - 1);
@@ -269,6 +275,9 @@ jobController.getJobs = async (req, res) => {
 
 jobController.getJobsAuth = async (req, res) => {
 	try {
+		const expireJobsAndServices = require("../util/expireJobsAndServices");
+		await expireJobsAndServices();
+
 		const page = req.query.page >= 1 ? req.query.page : 1;
 		const limit = req.query.limit >= 1 ? req.query.limit : 6;
 		const skip = limit * (page - 1);
@@ -521,6 +530,9 @@ jobController.delete = async (req, res) => {
 
 jobController.myJobs = async (req, res) => {
 	try {
+		const expireJobsAndServices = require("../util/expireJobsAndServices");
+		await expireJobsAndServices();
+
 		const page = req.params.page >= 1 ? req.params.page : 1;
 		const limit = req.query.limit >= 1 ? req.query.limit : 6;
 		const skip = limit * (page - 1);
@@ -947,6 +959,11 @@ jobController.createWithAddon = async (req, res, io) => {
 		bodyData.isActive = false;
 		bodyData.isPaymentSuccess = false;
 
+		const addonExpireDate = new Date();
+		addonExpireDate.setDate(addonExpireDate.getDate() + 1); // 1 day fallback validity
+		const expireDate = addonExpireDate.toISOString().split("T")[0];
+		bodyData.expireDate = expireDate;
+
 		const jobRecord = await Job.create(bodyData);
 
 		// Calculate total amount for payment entry
@@ -954,9 +971,6 @@ jobController.createWithAddon = async (req, res, io) => {
 		const totalAmount = parseFloat((bodyData.addOn.price + GST).toFixed(2));
 
 		const date = new Date().toISOString().split("T")[0];
-		const addonExpireDate = new Date();
-		addonExpireDate.setDate(addonExpireDate.getDate() + 10); // 10 days fallback validity
-		const expireDate = addonExpireDate.toISOString().split("T")[0];
 
 		// Create pending service/payment record linked to the job
 		const serviceRecord = await serviceModel.create({
