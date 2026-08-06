@@ -100,6 +100,10 @@ const normalizeEducation = (educationInput) => {
 	return parseItemList(educationInput, true);
 };
 
+const normalizeProjects = (projectsInput) => {
+	return parseItemList(projectsInput, false);
+};
+
 const normalizeHeaders = (headers) => {
 	if (!headers || !Array.isArray(headers)) return [];
 	
