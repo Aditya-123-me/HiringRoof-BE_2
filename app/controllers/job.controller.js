@@ -812,6 +812,8 @@ jobController.singleUpload = async (req, res) => {
 			if (userData.skills) userData.skills = normalizeSkills(userData.skills);
 			if (userData.projects) userData.projects = normalizeProjects(userData.projects);
 			if (userData.education) userData.education = normalizeEducation(userData.education);
+			userData.userType = "jobSeeker";
+			userData.registrationSource = "single";
 		}
 
 		// Find or create user

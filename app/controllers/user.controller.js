@@ -49,12 +49,15 @@ userController.addRescheduleRequest = async (req, res) => {
 
 userController.login = async (req, res) => {
 	try {
-		const { phone } = req.body;
-		const startsWithPlus = /^\+/.test(phone);
-
-		if (phone.length < 10 || startsWithPlus)
-			return res.status(404).send({ status: false, msg: "Please provide a valid number !!" });
+		let { phone } = req.body;
 		if (!phone) return res.status(404).send({ status: false, msg: "Please provide a number !!" });
+
+		const { normalizePhone } = require("../util/normalizeCandidateData");
+		phone = normalizePhone(phone);
+
+		if (phone.length < 10)
+			return res.status(404).send({ status: false, msg: "Please provide a valid 10-digit number !!" });
+
 		const findNumber = await User.findOne({ phone });
 
 		const min = 100000;
@@ -85,8 +88,12 @@ userController.login = async (req, res) => {
 
 userController.verify = async (req, res, io) => {
 	try {
-		const { phone, otp, userType } = req.body;
+		let { phone, otp, userType } = req.body;
 		if (!phone || !otp) return res.status(404).send({ status: false, msg: "Please provide number & otp !!" });
+
+		const { normalizePhone } = require("../util/normalizeCandidateData");
+		phone = normalizePhone(phone);
+
 		const findNumber = await User.findOne({ phone, otp });
 		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone or OTP is wrong, Please try again !!" });
 
@@ -610,8 +617,11 @@ userController.education = async (req, res) => {
 
 userController.numberCheck = async (req, res) => {
 	try {
-		const { phone } = req.body;
+		let { phone } = req.body;
 		if (!phone) return res.status(404).send({ status: false, msg: "Please provide a number !!" });
+
+		const { normalizePhone } = require("../util/normalizeCandidateData");
+		phone = normalizePhone(phone);
 
 		const findNumber = await User.findOne({ phone });
 		if (findNumber) {
@@ -628,9 +638,13 @@ userController.numberCheck = async (req, res) => {
 
 userController.getToken = async (req, res) => {
 	try {
-		const { phone, userType } = req.body;
+		let { phone, userType } = req.body;
 		console.log(phone);
 		if (!phone) return res.status(404).send({ status: false, msg: "Please provide number !!" });
+
+		const { normalizePhone } = require("../util/normalizeCandidateData");
+		phone = normalizePhone(phone);
+
 		const findNumber = await User.findOne({ phone });
 		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone is wrong, Please try again !!" });
 
