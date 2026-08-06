@@ -100,13 +100,65 @@ const normalizeEducation = (educationInput) => {
 	return parseItemList(educationInput, true);
 };
 
-const normalizeProjects = (projectsInput) => {
-	return parseItemList(projectsInput, false);
+const normalizeHeaders = (headers) => {
+	if (!headers || !Array.isArray(headers)) return [];
+	
+	const mapping = {
+		name: "name",
+		phone: "phone",
+		mobilenumber: "phone",
+		phonenumber: "phone",
+		email: "email",
+		gender: "gender",
+		dob: "dob",
+		dateofbirth: "dob",
+		skills: "skills",
+		experience: "experience",
+		location: "location",
+		address: "address",
+		resume: "resume",
+		resumeurl: "resume",
+		letter: "letter",
+		coverletter: "letter",
+		alternativephone: "alternativePhone",
+		alternatephone: "alternativePhone",
+		alternativephone2: "alternativePhone2",
+		alternatephone2: "alternativePhone2",
+		profession: "profession",
+		currentpay: "currentPay",
+		currentctc: "currentPay",
+		ctc: "currentPay",
+		expectedpay: "expectationPay",
+		expectedctc: "expectationPay",
+		ectc: "expectationPay",
+		projects: "projects",
+		project: "projects",
+		education: "education",
+		about: "about",
+		entrydate: "entryDate",
+		immediatejoiner: "immediateJoiner",
+		lastqualification: "lastQualification",
+		passoutyear: "passoutYear",
+		withoutcontactresume: "withoutContactResume",
+		response: "response",
+		wfo: "wfo",
+		interested: "interested",
+		callby: "callBy",
+		feedback: "feedback",
+		source: "source"
+	};
+
+	return headers.map(header => {
+		if (!header) return "";
+		const clean = String(header).trim().toLowerCase().replace(/[\s\-\_]+/g, "");
+		return mapping[clean] || header;
+	});
 };
 
 module.exports = {
 	normalizePhone,
 	normalizeSkills,
 	normalizeEducation,
-	normalizeProjects
+	normalizeProjects,
+	normalizeHeaders
 };

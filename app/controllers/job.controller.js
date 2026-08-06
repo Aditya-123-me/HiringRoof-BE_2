@@ -693,15 +693,17 @@ jobController.bulkUpload = async (req, res) => {
 		const sheetName = workbook.SheetNames[0];
 		const rawData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1 });
 
-		// Extract headers from the first row
-		const headers = rawData[0];
-
 		const {
 			normalizePhone,
 			normalizeSkills,
 			normalizeEducation,
-			normalizeProjects
+			normalizeProjects,
+			normalizeHeaders
 		} = require("../util/normalizeCandidateData");
+
+		// Extract headers from the first row and normalize them to schema keys
+		const rawHeaders = rawData[0];
+		const headers = normalizeHeaders(rawHeaders);
 
 		// Extract actual data (starting from the second row)
 		const formattedData = rawData.slice(1).map((row) => {
