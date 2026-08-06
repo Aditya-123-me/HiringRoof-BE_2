@@ -197,7 +197,7 @@ jobApplication.addFeedback = async (req, res) => {
 
 jobApplication.acceptRejectRescheduleRequest = async (req, res, io) => {
 	try {
-		const { _id, decision, newDate, newTime, link } = req.body;
+		const { _id, decision, newDate, newTime, link, interviewType } = req.body;
 
 		if (!_id || !mongoose.Types.ObjectId.isValid(_id)) {
 			return res.status(400).json({ message: "Invalid Job Application ID" });
@@ -213,20 +213,21 @@ jobApplication.acceptRejectRescheduleRequest = async (req, res, io) => {
 		}
 
 		const requestToHandle = jobApplication.temp;
+		const type = interviewType || requestToHandle.interviewType || "interviews";
 
 		if (decision === "accept") {
 			jobApplication.rescheduledInterviews.push({
-				originalDate: jobApplication[`${requestToHandle.interviewType}Date`],
-				originalTime: jobApplication[`${requestToHandle.interviewType}Time`],
+				originalDate: jobApplication[`${type}Date`],
+				originalTime: jobApplication[`${type}Time`],
 				newDate: newDate || requestToHandle.newDate,
 				newTime: convertTo12HourFormat(newTime) || requestToHandle.newTime,
-				reason: requestToHandle.reason,
+				reason: requestToHandle.reason || "Rescheduled by Admin",
 				rescheduledAt: new Date(),
-				interviewType: requestToHandle.interviewType,
+				interviewType: type,
 			});
 
-			jobApplication[`${requestToHandle.interviewType}Date`] = newDate || requestToHandle.newDate;
-			jobApplication[`${requestToHandle.interviewType}Time`] = convertTo12HourFormat(newTime) || requestToHandle.newTime;
+			jobApplication[`${type}Date`] = newDate || requestToHandle.newDate;
+			jobApplication[`${type}Time`] = convertTo12HourFormat(newTime) || requestToHandle.newTime;
 		}
 
 		if (link) jobApplication.interviewExtras = link;
@@ -237,8 +238,8 @@ jobApplication.acceptRejectRescheduleRequest = async (req, res, io) => {
 			senderType: "adminUser",
 			title: `${jobApplication.jobId.jobTittle} interview reschedule`,
 			desc: `${jobApplication.jobId.jobTittle} interview reschedule on ${
-				jobApplication[`${requestToHandle.interviewType}Date`]
-			} at ${jobApplication[`${requestToHandle.interviewType}Time`]}`,
+				jobApplication[`${type}Date`]
+			} at ${jobApplication[`${type}Time`]}`,
 			logo: jobApplication.jobId.companyLogo,
 		});
 		io.emit(`notifications_${data1.receiverId._id}`, data1);
@@ -249,8 +250,8 @@ jobApplication.acceptRejectRescheduleRequest = async (req, res, io) => {
 			senderType: "adminUser",
 			title: `${jobApplication.jobId.jobTittle} interview reschedule`,
 			desc: `${jobApplication.jobId.jobTittle} interview reschedule on ${
-				jobApplication[`${requestToHandle.interviewType}Date`]
-			} at ${jobApplication[`${requestToHandle.interviewType}Time`]}`,
+				jobApplication[`${type}Date`]
+			} at ${jobApplication[`${type}Time`]}`,
 			logo: jobApplication.jobId.companyLogo,
 		});
 		io.emit(`notifications_${data2.receiverId._id}`, data2);
