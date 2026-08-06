@@ -19,7 +19,10 @@ const io = socketIo(server, {
 require("./app/util/socket")(io);
 require("./app/util/SchedulingJobs")(io);
 
-connectDB();
+connectDB().then(async () => {
+	const migratePhoneNumbers = require("./app/util/migratePhoneNumbers");
+	await migratePhoneNumbers();
+});
 
 const corsOptions = {
 	origin: "*",

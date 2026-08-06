@@ -676,6 +676,8 @@ jobController.blockUnblockJob = async (req, res) => {
 	}
 }; 
 
+
+
 jobController.bulkUpload = async (req, res) => {
 	const { jobId } = req.body;
 	const posterId = req.user._id; // Get posterId from authenticated user
@@ -694,6 +696,13 @@ jobController.bulkUpload = async (req, res) => {
 		// Extract headers from the first row
 		const headers = rawData[0];
 
+		const {
+			normalizePhone,
+			normalizeSkills,
+			normalizeEducation,
+			normalizeProjects
+		} = require("../util/normalizeCandidateData");
+
 		// Extract actual data (starting from the second row)
 		const formattedData = rawData.slice(1).map((row) => {
 			let obj = {};
@@ -706,31 +715,18 @@ jobController.bulkUpload = async (req, res) => {
 				if (typeof obj.entryDate === "number") {
 					obj.entryDate = moment(XLSX.SSF.parse_date_code(obj.entryDate)).format("YYYY-MM-DD");
 				}
-				// else keep as-is (already a string date)
 			}
 			if (obj.dob) {
 				if (typeof obj.dob === "number") {
 					obj.dob = moment(XLSX.SSF.parse_date_code(obj.dob)).format("YYYY-MM-DD");
 				}
-				// else keep as-is
 			}
 
-			// Convert 'skills' from comma-separated string to an array
-			if (obj.skills) {
-				if (typeof obj.skills === "string") {
-					obj.skills = obj.skills.split(",").map((skill) => skill.trim()).filter(Boolean);
-				} else if (!Array.isArray(obj.skills)) {
-					obj.skills = [String(obj.skills)];
-				}
-			}
-
-			// Parse 'projects' and 'education' from JSON string if needed
-			if (obj.projects && typeof obj.projects === "string") {
-				try { obj.projects = JSON.parse(obj.projects); } catch { obj.projects = []; }
-			}
-			if (obj.education && typeof obj.education === "string") {
-				try { obj.education = JSON.parse(obj.education); } catch { obj.education = []; }
-			}
+			// Normalize candidate fields using custom helper
+			if (obj.phone) obj.phone = normalizePhone(obj.phone);
+			if (obj.skills) obj.skills = normalizeSkills(obj.skills);
+			if (obj.projects) obj.projects = normalizeProjects(obj.projects);
+			if (obj.education) obj.education = normalizeEducation(obj.education);
 
 			obj.userType = "jobSeeker";
 			obj.registrationSource = "bulk";
@@ -802,6 +798,20 @@ jobController.singleUpload = async (req, res) => {
 		const job = await Job.findById(jobId);
 		if (!job) return res.status(404).json({ status: false, msg: "No job found !!" });
 
+		const {
+			normalizePhone,
+			normalizeSkills,
+			normalizeEducation,
+			normalizeProjects
+		} = require("../util/normalizeCandidateData");
+
+		if (userData) {
+			if (userData.phone) userData.phone = normalizePhone(userData.phone);
+			if (userData.skills) userData.skills = normalizeSkills(userData.skills);
+			if (userData.projects) userData.projects = normalizeProjects(userData.projects);
+			if (userData.education) userData.education = normalizeEducation(userData.education);
+		}
+
 		// Find or create user
 		let user = await User.findOne({ phone: userData?.phone });
 
@@ -809,7 +819,7 @@ jobController.singleUpload = async (req, res) => {
 			user = await User.create(userData);
 		}
 
-		// Check if application exists
+		
 		let application = await JobApplication.findOne({
 			applicantId: user._id,
 			jobId,
