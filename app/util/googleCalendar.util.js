@@ -65,6 +65,11 @@ const createMeetLink = async (details) => {
 		const startDate = new Date(startIso);
 		const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
+		const attendees = [];
+		if (details.candidateEmail) attendees.push({ email: details.candidateEmail });
+		if (details.adminEmail) attendees.push({ email: details.adminEmail });
+		if (details.recruiterEmail) attendees.push({ email: details.recruiterEmail });
+
 		const event = {
 			summary: `${details.jobTitle} - Interview with ${details.candidateName}`,
 			description: `Interview for the position of ${details.jobTitle} at ${details.companyName}.`,
@@ -76,7 +81,7 @@ const createMeetLink = async (details) => {
 				dateTime: endDate.toISOString(),
 				timeZone: "Asia/Kolkata",
 			},
-			attendees: details.candidateEmail ? [{ email: details.candidateEmail }] : [],
+			attendees: attendees,
 			conferenceData: {
 				createRequest: {
 					requestId: `interview-${Date.now()}-${Math.floor(Math.random() * 1000)}`,

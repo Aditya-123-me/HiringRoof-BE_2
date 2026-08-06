@@ -966,7 +966,8 @@ jobApplication.doInterviewSelect = async (req, res, io) => {
 
 		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id })
 			.populate("jobId")
-			.populate("applicantId");
+			.populate("applicantId")
+			.populate("applierId");
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const meetLink = await createMeetLink({
@@ -976,6 +977,8 @@ jobApplication.doInterviewSelect = async (req, res, io) => {
 			jobTitle: application.jobId?.jobTittle,
 			date: req.body.interviewsDate,
 			time: time,
+			adminEmail: req.user?.email,
+			recruiterEmail: application.applierId?.email,
 		}); 
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
@@ -1034,7 +1037,8 @@ jobApplication.doInterview2Select = async (req, res, io) => {
 
 		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id })
 			.populate("jobId")
-			.populate("applicantId");
+			.populate("applicantId")
+			.populate("applierId");
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const meetLink = await createMeetLink({
@@ -1044,6 +1048,8 @@ jobApplication.doInterview2Select = async (req, res, io) => {
 			jobTitle: application.jobId?.jobTittle,
 			date: req.body.interviews2Date,
 			time: time,
+			adminEmail: req.user?.email,
+			recruiterEmail: application.applierId?.email,
 		});
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
@@ -1822,7 +1828,8 @@ jobApplication.doInterviewSelectAdminSide = async (req, res, io) => {
 
 		const application = await JobApplication.findOne({ _id: req.params._id })
 			.populate("jobId")
-			.populate("applicantId");
+			.populate("applicantId")
+			.populate("applierId");
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const meetLink = await createMeetLink({
@@ -1832,6 +1839,8 @@ jobApplication.doInterviewSelectAdminSide = async (req, res, io) => {
 			jobTitle: application.jobId?.jobTittle,
 			date: req.body.interviewsDate,
 			time: time,
+			adminEmail: req.user?.email,
+			recruiterEmail: application.applierId?.email,
 		});
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
@@ -1891,7 +1900,8 @@ jobApplication.doInterview2SelectAdminSide = async (req, res, io) => {
 		const time = convertTo12HourFormat(req.body.interviews2Time);
 		const application = await JobApplication.findOne({ _id: req.params._id })
 			.populate("jobId")
-			.populate("applicantId");
+			.populate("applicantId")
+			.populate("applierId");
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
 		const meetLink = await createMeetLink({
@@ -1901,6 +1911,8 @@ jobApplication.doInterview2SelectAdminSide = async (req, res, io) => {
 			jobTitle: application.jobId?.jobTittle,
 			date: req.body.interviews2Date,
 			time: time,
+			adminEmail: req.user?.email,
+			recruiterEmail: application.applierId?.email,
 		});
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
