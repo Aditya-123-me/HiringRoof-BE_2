@@ -975,7 +975,7 @@ jobApplication.doInterviewSelect = async (req, res, io) => {
 			jobTitle: application.jobId?.jobTittle,
 			date: req.body.interviewsDate,
 			time: time,
-		});
+		}); 
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
 			application._id,
