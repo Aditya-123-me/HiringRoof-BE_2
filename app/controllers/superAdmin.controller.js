@@ -394,4 +394,121 @@ superAdmin.getPendingAddonJobs = async (req, res) => {
 	}
 };
 
+/**
+ * POST /superAdmin/toggle-badge
+ * Body: { userId, badge }
+ * badge = "" to remove badge, or any label string to assign it
+ * SuperAdmin-only: assigns/removes a custom badge label to a candidate
+ */
+superAdmin.toggleCandidateBadge = async (req, res) => {
+	try {
+		const { userId, badge } = req.body;
+
+		if (!userId) {
+			return res.status(400).json({ status: false, msg: "userId is required" });
+		}
+
+		const user = await User.findById(userId);
+		if (!user) {
+			return res.status(404).json({ status: false, msg: "Candidate not found" });
+		}
+
+		// Toggle: if same badge is sent again, remove it. Otherwise assign the new one.
+		const newBadge = user.badge === badge && badge !== "" ? "" : (badge || "");
+
+		user.badge = newBadge;
+		await user.save();
+
+		return res.status(200).json({
+			status: true,
+			msg: newBadge ? `Badge "${newBadge}" assigned successfully` : "Badge removed successfully",
+			badge: newBadge,
+			user: { _id: user._id, name: user.name, badge: user.badge, status: user.status },
+		});
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+/**
+ * PUT /superAdmin/set-candidate-status
+ * Body: { userId, status }
+ * status: "Applied" | "Shortlisted" | "Interview 1" | "Interview 2" | "Selected" | "Rejected"
+ * SuperAdmin-level status update — bypasses stage-order enforcement
+ */
+superAdmin.setCandidateStatus = async (req, res) => {
+	try {
+		const { userId, status } = req.body;
+
+		const VALID_STATUSES = ["Applied", "Shortlisted", "Interview 1", "Interview 2", "Selected", "Rejected"];
+
+		if (!userId) return res.status(400).json({ status: false, msg: "userId is required" });
+		if (!status || !VALID_STATUSES.includes(status)) {
+			return res.status(400).json({
+				status: false,
+				msg: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
+			});
+		}
+
+		const user = await User.findByIdAndUpdate(
+			userId,
+			{ $set: { status, response: status } },
+			{ new: true }
+		);
+
+		if (!user) return res.status(404).json({ status: false, msg: "Candidate not found" });
+
+		return res.status(200).json({
+			status: true,
+			msg: `Candidate status updated to "${status}"`,
+			user: { _id: user._id, name: user.name, status: user.status, badge: user.badge },
+		});
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+/**
+ * GET /superAdmin/candidates-by-status?status=Selected&page=1&limit=20
+ * Returns all candidates filtered by their pipeline status
+ */
+superAdmin.getCandidatesByStatus = async (req, res) => {
+	try {
+		const { status, page = 1, limit = 20 } = req.query;
+
+		const VALID_STATUSES = ["Applied", "Shortlisted", "Interview 1", "Interview 2", "Selected", "Rejected"];
+		const filter = { userType: "jobSeeker" };
+
+		if (status) {
+			if (!VALID_STATUSES.includes(status)) {
+				return res.status(400).json({ status: false, msg: `Invalid status filter` });
+			}
+			filter.status = status;
+		}
+
+		const skip = (Number(page) - 1) * Number(limit);
+		const [candidates, total] = await Promise.all([
+			User.find(filter)
+				.select("name email phone profileImage profession location status badge response isHired createdAt")
+				.skip(skip)
+				.limit(Number(limit))
+				.sort({ updatedAt: -1 }),
+			User.countDocuments(filter),
+		]);
+
+		return res.status(200).json({
+			status: true,
+			total,
+			page: Number(page),
+			pages: Math.ceil(total / Number(limit)),
+			data: candidates,
+		});
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = superAdmin;

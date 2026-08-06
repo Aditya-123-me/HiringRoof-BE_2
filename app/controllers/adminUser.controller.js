@@ -413,42 +413,59 @@ adminUser.getJobApplicationsHRdetails = async (req, res) => {
 		const skip = (page - 1) * limit;
 
 		// Fetch job applications for the given job ID with pagination and sorting
-		const jobApplications = await JobApplication.find({ jobId }).skip(skip).limit(Number(limit)).sort("-createdAt"); // Sort by date in descending order
+		const jobApplications = await JobApplication.find({ jobId })
+			.skip(skip)
+			.limit(Number(limit))
+			.sort("-createdAt");
 
-		// Calculate statistics
+		// Calculate statistics + build applicantId → jobApplication map
 		let interviewScheduled = 0;
 		let interviewTaken = 0;
 		let totalSelectedCandidates = 0;
 		const candidateIds = [];
+		const jobAppMap = {}; // { applicantId: { jobApplicationId, pipelineStatus, uploadBatch, uploadSource, source } }
 
 		jobApplications.forEach((application) => {
-			if (application.interviews || application.interviews2) {
-				interviewScheduled++;
-			}
+			if (application.interviews || application.interviews2) interviewScheduled++;
 
 			if (application.interviewStatus) {
 				const { interviewPending, interview2Pending } = application.interviewStatus;
-
-				// Increment interviewTaken count if interviewPending is false
-				if (interviewPending === false && interview2Pending === false) {
-					interviewTaken++;
-				}
+				if (interviewPending === false && interview2Pending === false) interviewTaken++;
 			}
 
-			// Count selected candidates
-			if (application.selectedCandidates) {
-				totalSelectedCandidates++;
-			}
+			if (application.selectedCandidates) totalSelectedCandidates++;
 
-			// Collect candidate IDs to fetch user details later
+			const applicantIdStr = application.applicantId.toString();
 			candidateIds.push(application.applicantId);
+
+			// Store job-application level data keyed by applicantId
+			jobAppMap[applicantIdStr] = {
+				jobApplicationId: application._id,
+				pipelineStatus: application.pipelineStatus || "Applied",
+				uploadBatch: application.uploadBatch,
+				uploadSource: application.uploadSource,
+				source: application.source,
+			};
 		});
 
 		// Fetch user details for candidates
-		const candidates = await User.find({ _id: { $in: candidateIds } });
+		const userDocs = await User.find({ _id: { $in: candidateIds } }).lean();
 		const totalCandidatesApplied = await JobApplication.countDocuments({ jobId });
 
-		// Return the job details and statistics as JSON response
+		// Merge per-job pipelineStatus + jobApplicationId into each user object
+		const candidates = userDocs.map((user) => {
+			const appData = jobAppMap[user._id.toString()] || {};
+			return {
+				...user,
+				jobApplicationId: appData.jobApplicationId,
+				pipelineStatus: appData.pipelineStatus,
+				// Keep these so batch filter still works
+				uploadBatch: appData.uploadBatch ?? user.uploadBatch,
+				uploadSource: appData.uploadSource ?? user.uploadSource,
+				source: appData.source ?? user.source,
+			};
+		});
+
 		res.json({
 			status: true,
 			page: Number(page),

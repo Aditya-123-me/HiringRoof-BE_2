@@ -92,6 +92,8 @@ const userSchema = mongoose.Schema(
 		experience: { type: String, default: "" },
 		withoutContactResume: { type: String, default: "" },
 		response: { type: String, default: "" },
+		status: { type: String, default: "Applied", enum: ["Applied", "Shortlisted", "Interview 1", "Interview 2", "Selected", "Rejected"] },
+		badge: { type: String, default: "" }, // superAdmin-assigned badge label
 		wfo: { type: String, default: "" },
 		interested: { type: String, default: "" },
 		callBy: { type: String, default: "" },

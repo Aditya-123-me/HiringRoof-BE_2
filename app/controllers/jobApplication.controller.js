@@ -2014,4 +2014,49 @@ jobApplication.selectedAdminSide = async (req, res, io) => {
 	}
 };
 
+/**
+ * PUT /jobApplication/pipeline-status/:applicationId
+ * Body: { status }
+ * Updates the pipelineStatus of a specific JobApplication (per-job per-candidate)
+ */
+jobApplication.updatePipelineStatus = async (req, res) => {
+	try {
+		const { applicationId } = req.params;
+		const { status } = req.body;
+
+		const VALID_STATUSES = ["Applied", "Shortlisted", "Interview 1", "Interview 2", "Selected", "Rejected"];
+
+		if (!applicationId || !mongoose.Types.ObjectId.isValid(applicationId)) {
+			return res.status(400).json({ status: false, msg: "Invalid application ID" });
+		}
+
+		if (!status || !VALID_STATUSES.includes(status)) {
+			return res.status(400).json({
+				status: false,
+				msg: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
+			});
+		}
+
+		const application = await JobApplication.findByIdAndUpdate(
+			applicationId,
+			{ $set: { pipelineStatus: status } },
+			{ new: true }
+		);
+
+		if (!application) {
+			return res.status(404).json({ status: false, msg: "Job application not found" });
+		}
+
+		return res.status(200).json({
+			status: true,
+			msg: `Pipeline status updated to "${status}"`,
+			pipelineStatus: application.pipelineStatus,
+			applicationId: application._id,
+		});
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = jobApplication;

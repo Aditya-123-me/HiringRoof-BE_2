@@ -11,4 +11,9 @@ module.exports = (router, io) => {
 	router.get("/superAdmin/manual-payments", adminAuthorization, superAdmin.getManualPayments);
 	router.get("/superAdmin/get-pending-addon-jobs", adminAuthorization, superAdmin.getPendingAddonJobs);
 	router.put("/superAdmin/verify-manual-payment/:id", adminAuthorization, superAdmin.verifyManualPayment);
+
+	// Badge & Status APIs
+	router.post("/superAdmin/toggle-badge", adminAuthorization, superAdmin.toggleCandidateBadge);
+	router.put("/superAdmin/set-candidate-status", adminAuthorization, superAdmin.setCandidateStatus);
+	router.get("/superAdmin/candidates-by-status", adminAuthorization, superAdmin.getCandidatesByStatus);
 };

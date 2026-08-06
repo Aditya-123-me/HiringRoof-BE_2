@@ -9,6 +9,11 @@ const jobApplicationSchema = mongoose.Schema(
 		interviews: { type: Boolean, default: false },
 		interviews2: { type: Boolean, default: false },
 		selectedCandidates: { type: Boolean, default: null },
+		pipelineStatus: {
+			type: String,
+			default: "Applied",
+			enum: ["Applied", "Shortlisted", "Interview 1", "Interview 2", "Selected", "Rejected"],
+		},
 		interviewsDate: { type: String, default: "" },
 		interviewsTime: { type: String, default: "" },
 		interviews2Date: { type: String, default: "" },

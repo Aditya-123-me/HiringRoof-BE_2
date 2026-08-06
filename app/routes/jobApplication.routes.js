@@ -48,6 +48,7 @@ module.exports = (router, io) => {
 	router.post("/jobApplication/accept-reject-reschedule", adminAuthorization, (req, res) =>
 		jobApplication.acceptRejectRescheduleRequest(req, res, io)
 	);
+	router.put("/jobApplication/pipeline-status/:applicationId", adminAuthorization, jobApplication.updatePipelineStatus);
 	router.post("/jobApplication/addFeedback", adminAuthorization,jobApplication.addFeedback);
 	router.get("/jobApplication/getJobApplicationsByStatus", adminAuthorization,jobApplication.getJobApplicationsByStatus);
 	router.get("/jobApplication/findBlockedJobsByHR",adminAuthorization, jobApplication.findBlockedJobsByHR);

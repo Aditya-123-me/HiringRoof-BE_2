@@ -1,4 +1,5 @@
 const User = require("../models/user.model");
+	
 const jwt = require("jsonwebtoken");
 const extractSkillSub = require("../util/functions");
 const { JWT_SECRET } = require("../config/config");
@@ -305,6 +306,13 @@ userController.update = async (req, res, io) => {
 		if (req.body.companyEmail) bodyData.companyEmail = req.body.companyEmail;
 		if (req.body.companyPhone) bodyData.companyPhone = req.body.companyPhone;
 		if (req.body.companyAlternativePhone) bodyData.companyAlternativePhone = req.body.companyAlternativePhone;
+		if (req.body.response) bodyData.response = req.body.response;
+		if (req.body.status) bodyData.status = req.body.status;
+		if (req.body.jobStatus) bodyData.status = req.body.jobStatus; // alias
+		if (req.body.wfo) bodyData.wfo = req.body.wfo;
+		if (req.body.interested) bodyData.interested = req.body.interested;
+		if (req.body.callBy) bodyData.callBy = req.body.callBy;
+		if (req.body.feedback) bodyData.feedback = req.body.feedback;
 		if (req.body.skills) {
 			if (typeof req.body.skills === "string") {
 				try {
