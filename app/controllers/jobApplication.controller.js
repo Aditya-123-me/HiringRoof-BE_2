@@ -2037,9 +2037,48 @@ jobApplication.updatePipelineStatus = async (req, res) => {
 			});
 		}
 
+		// Prepare update object to keep all boolean fields in sync with the selected stage
+		const updateData = { pipelineStatus: status };
+
+		switch (status) {
+			case "Applied":
+				updateData.shortlist = false;
+				updateData.interviews = false;
+				updateData.interviews2 = false;
+				updateData.selectedCandidates = null;
+				break;
+			case "Shortlisted":
+				updateData.shortlist = true;
+				updateData.interviews = false;
+				updateData.interviews2 = false;
+				updateData.selectedCandidates = null;
+				break;
+			case "Interview 1":
+				updateData.shortlist = true;
+				updateData.interviews = true;
+				updateData.interviews2 = false;
+				updateData.selectedCandidates = null;
+				break;
+			case "Interview 2":
+				updateData.shortlist = true;
+				updateData.interviews = true;
+				updateData.interviews2 = true;
+				updateData.selectedCandidates = null;
+				break;
+			case "Selected":
+				updateData.shortlist = true;
+				updateData.interviews = true;
+				updateData.interviews2 = true;
+				updateData.selectedCandidates = true;
+				break;
+			case "Rejected":
+				updateData.selectedCandidates = false;
+				break;
+		}
+
 		const application = await JobApplication.findByIdAndUpdate(
 			applicationId,
-			{ $set: { pipelineStatus: status } },
+			{ $set: updateData },
 			{ new: true }
 		);
 
