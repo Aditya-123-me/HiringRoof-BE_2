@@ -100,6 +100,18 @@ const userSchema = mongoose.Schema(
 		feedback: { type: String, default: "" },
 		source: { type: String, default: "" },
 		registrationSource: { type: String, default: "self", enum: ["self", "bulk"] },
+		selectedBadge:
+		{
+			type:Boolean,
+			default:false
+		},
+		selectedIn:[{
+			job:{type: mongoose.Schema.Types.ObjectId, ref: "jobs", default: null},
+			date:{
+				type:Date,
+				default:Date.now
+			}
+		}]
 	},
 	{ timestamps: true }
 );

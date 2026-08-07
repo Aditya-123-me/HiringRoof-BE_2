@@ -881,10 +881,12 @@ jobApplication.shortlist = async (req, res, io) => {
 		const userCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
 		if (!userCheck) return res.status(404).send({ status: false, msg: "The application doesn't belong to this user !!" });
 
-		const updatedApplication = await JobApplication.findByIdAndUpdate(application._id, { shortlist: true }, { new: true })
+		const updatedApplication = await JobApplication.findByIdAndUpdate(application._id, { shortlist: true, pipelineStatus: "Shortlisted" }, { new: true })
 			.populate("jobId")
 			.populate({ path: "applierId", select: "name userType profileImage" })
 			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		await User.findByIdAndUpdate(application.applicantId, { status: "Shortlisted", response: "Shortlisted" });
 
 		const data = await createNotification({
 			senderId: updatedApplication.applierId,
@@ -923,12 +925,14 @@ jobApplication.notSelected = async (req, res, io) => {
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
 			application._id,
-			{ selectedCandidates: false },
+			{ selectedCandidates: false, pipelineStatus: "Rejected" },
 			{ new: true }
 		)
 			.populate("jobId")
 			.populate({ path: "applierId", select: "name userType profileImage" })
 			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		await User.findByIdAndUpdate(application.applicantId, { status: "Rejected", response: "Rejected" });
 
 		const data = await createNotification({
 			senderId: updatedApplication.applierId,
@@ -988,12 +992,15 @@ jobApplication.doInterviewSelect = async (req, res, io) => {
 				interviewsDate: req.body.interviewsDate,
 				interviewsTime: time,
 				interviewExtras: meetLink || "",
+				pipelineStatus: "Interview 1",
 			},
 			{ new: true }
 		)
 			.populate("jobId")
 			.populate({ path: "applierId", select: "name userType profileImage" })
 			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		await User.findByIdAndUpdate(application.applicantId, { status: "Interview 1", response: "Interview 1" });
 
 		const hrAdmin = await adminUserModel.findOne({ "jobTarget.jobIds.jobId": application.jobId });
 		if (hrAdmin) {
@@ -1059,12 +1066,15 @@ jobApplication.doInterview2Select = async (req, res, io) => {
 				interviews2Date: req.body.interviews2Date,
 				interviews2Time: time,
 				interviewExtras: meetLink || "",
+				pipelineStatus: "Interview 2",
 			},
 			{ new: true }
 		)
 			.populate("jobId")
 			.populate({ path: "applierId", select: "name userType profileImage" })
 			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		await User.findByIdAndUpdate(application.applicantId, { status: "Interview 2", response: "Interview 2" });
 
 			const hrAdmin = await adminUserModel.findOne({ "jobTarget.jobIds.jobId": application.jobId });
 			if (hrAdmin) {
@@ -1112,11 +1122,17 @@ jobApplication.selected = async (req, res, io) => {
 
 		const findUser = await User.findOne({ _id: application.applicantId });
 		findUser.isHired = true;
+		findUser.status = "Selected";
+		findUser.response = "Selected";
+		findUser.selectedBadge = true;
+		if (!findUser.selectedIn.some(item => item.job && item.job.toString() === application.jobId.toString())) {
+			findUser.selectedIn.push({ job: application.jobId, date: new Date() });
+		}
 		await findUser.save();
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
 			application._id,
-			{ selectedCandidates: true, offerLetterDate, offerLetterTime },
+			{ selectedCandidates: true, offerLetterDate, offerLetterTime, pipelineStatus: "Selected" },
 			{ new: true }
 		)
 			.populate("jobId")
@@ -1783,10 +1799,12 @@ jobApplication.adminShortlist = async (req, res, io) => {
 		const application = await JobApplication.findOne({ _id: req.params._id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
-		const updatedApplication = await JobApplication.findByIdAndUpdate(application._id, { shortlist: true }, { new: true })
+		const updatedApplication = await JobApplication.findByIdAndUpdate(application._id, { shortlist: true, pipelineStatus: "Shortlisted" }, { new: true })
 			.populate("jobId")
 			.populate({ path: "applierId", select: "name userType profileImage" })
 			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		await User.findByIdAndUpdate(application.applicantId, { status: "Shortlisted", response: "Shortlisted" });
 
 		const data = await createNotification({
 			senderType: "adminUser",
@@ -1850,12 +1868,15 @@ jobApplication.doInterviewSelectAdminSide = async (req, res, io) => {
 				interviewsDate: req.body.interviewsDate,
 				interviewsTime: time,
 				interviewExtras: meetLink || "",
+				pipelineStatus: "Interview 1",
 			},
 			{ new: true }
 		)
 			.populate("jobId")
 			.populate({ path: "applierId", select: "name userType profileImage" })
 			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		await User.findByIdAndUpdate(application.applicantId, { status: "Interview 1", response: "Interview 1" });
 
 		const hrAdmin = await adminUserModel.findOne({ "jobTarget.jobIds.jobId": application.jobId });
 		if (hrAdmin) {
@@ -1922,12 +1943,15 @@ jobApplication.doInterview2SelectAdminSide = async (req, res, io) => {
 				interviews2Date: req.body.interviews2Date,
 				interviews2Time: time,
 				interviewExtras: meetLink || "",
+				pipelineStatus: "Interview 2",
 			},
 			{ new: true }
 		)
 			.populate("jobId")
 			.populate({ path: "applierId", select: "name userType profileImage" })
 			.populate({ path: "applicantId", select: "name userType profileImage isHired" });
+
+		await User.findByIdAndUpdate(application.applicantId, { status: "Interview 2", response: "Interview 2" });
 
 		const hrAdmin = await adminUserModel.findOne({ "jobTarget.jobIds.jobId": application.jobId });
 		if (hrAdmin) {
@@ -1973,12 +1997,18 @@ jobApplication.selectedAdminSide = async (req, res, io) => {
 		const findUser = await User.findOne({ _id: application.applicantId });
 		if (findUser) {
 			findUser.isHired = true;
+			findUser.status = "Selected";
+			findUser.response = "Selected";
+			findUser.selectedBadge = true;
+			if (!findUser.selectedIn.some(item => item.job && item.job.toString() === application.jobId.toString())) {
+				findUser.selectedIn.push({ job: application.jobId, date: new Date() });
+			}
 			await findUser.save();
 		}
 
 		const updatedApplication = await JobApplication.findByIdAndUpdate(
 			application._id,
-			{ selectedCandidates: true, offerLetterDate, offerLetterTime },
+			{ selectedCandidates: true, offerLetterDate, offerLetterTime, pipelineStatus: "Selected" },
 			{ new: true }
 		)
 			.populate("jobId")
@@ -2097,6 +2127,37 @@ jobApplication.updatePipelineStatus = async (req, res) => {
 
 		if (!application) {
 			return res.status(404).json({ status: false, msg: "Job application not found" });
+		}
+
+		// Sync User-level global selectedBadge and selectedIn history
+		try {
+			if (status === "Selected") {
+				// Mark as selected globally, add to selectedIn history (using $addToSet or push unique)
+				await User.findByIdAndUpdate(application.applicantId, {
+					$set: { selectedBadge: true },
+					$addToSet: { selectedIn: { job: application.jobId } }
+				});
+			} else {
+				// If transitioned away from Selected, check if they have any other active Selected jobs
+				const otherSelectedCount = await JobApplication.countDocuments({
+					_id: { $ne: applicationId },
+					applicantId: application.applicantId,
+					pipelineStatus: "Selected"
+				});
+				if (otherSelectedCount === 0) {
+					await User.findByIdAndUpdate(application.applicantId, {
+						$set: { selectedBadge: false },
+						$pull: { selectedIn: { job: application.jobId } }
+					});
+				} else {
+					// If they are still selected in another job, just remove this specific job from active list
+					await User.findByIdAndUpdate(application.applicantId, {
+						$pull: { selectedIn: { job: application.jobId } }
+					});
+				}
+			}
+		} catch (dbErr) {
+			console.error("Failed to sync user-level selection flags:", dbErr);
 		}
 
 		return res.status(200).json({

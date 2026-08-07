@@ -16,4 +16,5 @@ module.exports = (router, io) => {
 	router.post("/superAdmin/toggle-badge", adminAuthorization, superAdmin.toggleCandidateBadge);
 	router.put("/superAdmin/set-candidate-status", adminAuthorization, superAdmin.setCandidateStatus);
 	router.get("/superAdmin/candidates-by-status", adminAuthorization, superAdmin.getCandidatesByStatus);
+	router.put("/superAdmin/candidate-selection", adminAuthorization, superAdmin.updateCandidateSelection);
 };

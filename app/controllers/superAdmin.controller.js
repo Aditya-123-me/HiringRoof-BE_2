@@ -511,4 +511,53 @@ superAdmin.getCandidatesByStatus = async (req, res) => {
 	}
 };
 
+/**
+ * PUT /superAdmin/candidate-selection
+ * Body: { userId, selectedBadge, jobIdToPush, jobIdToRemove }
+ * Allows SuperAdmin to manually override the global selection badge and history
+ */
+superAdmin.updateCandidateSelection = async (req, res) => {
+	try {
+		const { userId, selectedBadge, jobIdToPush, jobIdToRemove } = req.body;
+
+		if (!userId) {
+			return res.status(400).json({ status: false, msg: "userId is required" });
+		}
+
+		const user = await User.findById(userId);
+		if (!user) {
+			return res.status(404).json({ status: false, msg: "Candidate not found" });
+		}
+
+		const updateOps = {};
+
+		if (selectedBadge !== undefined) {
+			updateOps.$set = { selectedBadge: Boolean(selectedBadge) };
+		}
+
+		if (jobIdToPush && mongoose.Types.ObjectId.isValid(jobIdToPush)) {
+			updateOps.$addToSet = { selectedIn: { job: jobIdToPush, date: new Date() } };
+		}
+
+		if (jobIdToRemove && mongoose.Types.ObjectId.isValid(jobIdToRemove)) {
+			updateOps.$pull = { selectedIn: { job: jobIdToRemove } };
+		}
+
+		const updatedUser = await User.findByIdAndUpdate(
+			userId,
+			updateOps,
+			{ new: true }
+		).select("name email selectedBadge selectedIn");
+
+		return res.status(200).json({
+			status: true,
+			msg: "Candidate selection updated successfully",
+			data: updatedUser
+		});
+	} catch (error) {
+		console.error(error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = superAdmin;
