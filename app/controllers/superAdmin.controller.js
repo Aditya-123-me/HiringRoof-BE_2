@@ -430,7 +430,7 @@ superAdmin.toggleCandidateBadge = async (req, res) => {
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };
-
+ 
 /**
  * PUT /superAdmin/set-candidate-status
  * Body: { userId, status }

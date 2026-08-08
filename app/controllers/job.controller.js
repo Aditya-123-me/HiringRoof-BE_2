@@ -15,6 +15,7 @@ const { createMeetLink } = require("../util/googleCalendar.util");
 const XLSX = require("xlsx");
 const fs = require("fs");
 const path = require("path");
+// const jobModel = require("../models/job.model");
 
 const jobController = {};
 
@@ -84,7 +85,7 @@ jobController.post = async (req, res, io) => {
 		bodyData.tags = tags;
 		// Tag added End
 
-		if (req.body.pay === "") bodyData.pay = 0;
+		if (req.body.pay === "") bodyData.pay = "";
 
 		if (req.file) {
 			const imgUrl = await imageUpload(req.file, `${req.user._id}_${new Date().getTime()}_CompanyLogo`, "companyLogo");
@@ -237,7 +238,7 @@ jobController.getJobs = async (req, res) => {
 		if (req.query.availability) filters.availability = req.query.availability;
 		if (req.query.timePeriod) filters.timePeriod = req.query.timePeriod;
 		if (req.query.payType) filters.payType = req.query.payType;
-		if (req.query.pay) filters.pay = { $gt: req.query.pay };
+		if (req.query.pay) filters.pay = { $regex: req.query.pay, $options: "i" };
 		const date = new Date(req.query.dateOfPosting);
 		if (req.query.dateOfPosting) filters.createdAt = { $gt: date.toISOString() };
 		if (req.query.jobTittle) filters.jobTittle = { $regex: req.query.jobTittle, $options: "i" };
@@ -291,7 +292,7 @@ jobController.getJobsAuth = async (req, res) => {
 		if (req.query.availability) filters.availability = req.query.availability;
 		if (req.query.timePeriod) filters.timePeriod = req.query.timePeriod;
 		if (req.query.payType) filters.payType = req.query.payType;
-		if (req.query.pay) filters.pay = { $gt: req.query.pay };
+		if (req.query.pay) filters.pay = { $regex: req.query.pay, $options: "i" };
 		const date = new Date(req.query.dateOfPosting);
 		if (req.query.dateOfPosting) filters.createdAt = { $gt: date.toISOString() };
 		if (req.query.jobTittle) filters.jobTittle = { $regex: req.query.jobTittle, $options: "i" };
@@ -906,7 +907,7 @@ jobController.createWithAddon = async (req, res, io) => {
 		bodyData.workType = parsedJobData.workType;
 		bodyData.timePeriod = parsedJobData.timePeriod || "Asia/Kolkata";
 		bodyData.note = parsedJobData.note;
-		bodyData.pay = parsedJobData.pay || 0;
+		bodyData.pay = parsedJobData.pay || "";
 		bodyData.payType = parsedJobData.payType;
 		bodyData.location = parsedJobData.location;
 		bodyData.companyName = parsedJobData.companyName || ownUser.companyName;
@@ -1185,6 +1186,66 @@ jobController.generateJdPdf = async (req, res) => {
 		if (!res.headersSent) {
 			return res.status(500).json({ status: false, msg: error.message });
 		}
+	}
+};
+jobController.editJobPost = async (req, res) => {
+	try {
+		const { jobId } = req.params;
+		if (!jobId) {
+			return res.status(400).json({ status: false, msg: "Job Id not found!" });
+		}
+
+		const job = await Job.findById(jobId);
+		if (!job) {
+			return res.status(404).json({ status: false, msg: "Job not found for this id!" });
+		}
+
+		const ownsJob = job.userId && req.user && job.userId.toString() === req.user._id.toString();
+		const isSuperAdmin = req.user && (req.user.type === "superAdmin" || req.user.type === "superadmin");
+
+		if (!isSuperAdmin && !ownsJob) {
+			return res.status(403).json({ status: false, msg: "You do not have permission to edit this job!" });
+		}
+
+		const updateData = {};
+		
+		const allowedFields = [
+			"jobTittle", "jobType", "workType", "pay", "payType", 
+			"location", "companyName", "companyShortName", "experience", 
+			"vacancies", "note", "availability", "stream", "skills"
+		];
+
+		allowedFields.forEach(field => {
+			if (req.body[field] !== undefined) {
+				updateData[field] = req.body[field];
+			}
+		});
+
+		if (req.body.stream && typeof req.body.stream === "string") {
+			try { updateData.stream = JSON.parse(req.body.stream); } catch (e) {}
+		}
+		if (req.body.skills && typeof req.body.skills === "string") {
+			try { updateData.skills = JSON.parse(req.body.skills); } catch (e) {}
+		}
+
+		if (req.body.pay === "") {
+			updateData.pay = "";
+		}
+
+		const updatedJob = await Job.findByIdAndUpdate(
+			jobId,
+			{ $set: updateData },
+			{ new: true }
+		);
+
+		return res.status(200).json({
+			status: true,
+			msg: "Job post updated successfully!",
+			data: updatedJob
+		});
+	} catch (error) {
+		console.error("Error in editJobPost:", error);
+		return res.status(500).json({ status: false, msg: error.message });
 	}
 };
 

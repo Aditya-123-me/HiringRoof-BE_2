@@ -1,3 +1,4 @@
+const jobController = require("../controllers/job.controller");
 const superAdmin = require("../controllers/superAdmin.controller");
 const adminAuthorization = require("../middleware/adminAuthorization.middleware");
 const upload = require("../middleware/multer.middleware");
@@ -17,4 +18,6 @@ module.exports = (router, io) => {
 	router.put("/superAdmin/set-candidate-status", adminAuthorization, superAdmin.setCandidateStatus);
 	router.get("/superAdmin/candidates-by-status", adminAuthorization, superAdmin.getCandidatesByStatus);
 	router.put("/superAdmin/candidate-selection", adminAuthorization, superAdmin.updateCandidateSelection);
+	router.put("superAdmin/job/edit/:jobId", adminAuthorization, jobController.editJobPost);
+
 };

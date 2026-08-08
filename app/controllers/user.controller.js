@@ -236,8 +236,25 @@ userController.jobSeeker = async (req, res) => {
 			sort: { createdAt: -1 },
 		};
 
-		const users = await User.find({ userType: "jobSeeker" }, null, options);
-		const totalUser = await User.countDocuments({ userType: "jobSeeker" });
+		const filters = { userType: "jobSeeker" };
+		if(req.user && req.user.type !=="superAdmin" || req.user && req.user.type !=="superadmin"){
+			const jobApplications = require("../models/jobApplication.model");
+			const assignedJobs = req.user?.jobTarget?.reduce((acc,target)=>{
+				if(target.jobIds){
+					target.jobIds?.forEach(j=>{
+						if(j.jobId) acc.push(j.jobId);
+					})
+				}
+				return acc;
+			},[]);
+			const jobApps = await JobApplication.find({ jobId: { $in: assignedJobIds } }).select("applicantId");
+			const candidateIds = jobApps.map(app => app.applicantId);
+			filters._id = { $in: candidateIds };
+		}
+
+
+		const users = await User.find(filters, null, options);
+		const totalUser = await User.countDocuments(filters);
 
 		return res.status(200).json({
 			status: true,

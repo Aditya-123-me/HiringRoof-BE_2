@@ -485,7 +485,7 @@ jobApplication.get = async (req, res) => {
 		const page = req.params.page >= 1 ? req.params.page : 1;
 		const limit = req.params.limit >= 1 ? req.params.limit : 6;
 		const skip = limit * (page - 1);
-		const userId = req.user._id;
+		const userId = req.user._id; 
 
 		const jobSeeker = await JobApplication.find({ applicantId: userId, ...req.query })
 			.limit(limit)
@@ -2065,7 +2065,7 @@ jobApplication.selectedAdminSide = async (req, res, io) => {
 jobApplication.updatePipelineStatus = async (req, res) => {
 	try {
 		const { applicationId } = req.params;
-		const { status } = req.body;
+		const { status, date, time } = req.body;
 
 		const VALID_STATUSES = ["Applied", "Shortlisted", "Interview 1", "Interview 2", "Selected", "Rejected"];
 
@@ -2101,18 +2101,95 @@ jobApplication.updatePipelineStatus = async (req, res) => {
 				updateData.interviews = true;
 				updateData.interviews2 = false;
 				updateData.selectedCandidates = null;
+
+				// Fetch application to check if date is already set (or if we are overriding it)
+				const existingApp = await JobApplication.findById(applicationId);
+				if (existingApp && (!existingApp.interviewsDate || date || time)) {
+					const tomorrow = new Date();
+					tomorrow.setDate(tomorrow.getDate() + 1);
+					const dateStr = date || tomorrow.toISOString().split("T")[0];
+					const timeStr = time ? convertTo12HourFormat(time) : "11:00 AM";
+
+					updateData.interviewsDate = dateStr;
+					updateData.interviewsTime = timeStr;
+
+					try {
+						const populatedApp = await JobApplication.findById(applicationId)
+							.populate("jobId")
+							.populate("applicantId")
+							.populate("applierId");
+						
+						const meetLink = await createMeetLink({
+							candidateEmail: populatedApp.applicantId?.email,
+							candidateName: populatedApp.applicantId?.name,
+							companyName: populatedApp.jobId?.companyName,
+							jobTitle: populatedApp.jobId?.jobTittle,
+							date: dateStr,
+							time: timeStr,
+							adminEmail: req.user?.email,
+							recruiterEmail: populatedApp.applierId?.email,
+						});
+
+						if (meetLink) {
+							updateData.interviewExtras = meetLink;
+						}
+					} catch (meetErr) {
+						console.error("Auto Meet link generation failed:", meetErr);
+					}
+				}
 				break;
 			case "Interview 2":
 				updateData.shortlist = true;
 				updateData.interviews = true;
 				updateData.interviews2 = true;
 				updateData.selectedCandidates = null;
+
+				const existingApp2 = await JobApplication.findById(applicationId);
+				if (existingApp2 && (!existingApp2.interviews2Date || date || time)) {
+					const dayAfterTomorrow = new Date();
+					dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+					const dateStr = date || dayAfterTomorrow.toISOString().split("T")[0];
+					const timeStr = time ? convertTo12HourFormat(time) : "11:00 AM";
+
+					updateData.interviews2Date = dateStr;
+					updateData.interviews2Time = timeStr;
+
+					try {
+						const populatedApp = await JobApplication.findById(applicationId)
+							.populate("jobId")
+							.populate("applicantId")
+							.populate("applierId");
+						
+						const meetLink = await createMeetLink({
+							candidateEmail: populatedApp.applicantId?.email,
+							candidateName: populatedApp.applicantId?.name,
+							companyName: populatedApp.jobId?.companyName,
+							jobTitle: populatedApp.jobId?.jobTittle,
+							date: dateStr,
+							time: timeStr,
+							adminEmail: req.user?.email,
+							recruiterEmail: populatedApp.applierId?.email,
+						});
+
+						if (meetLink) {
+							updateData.interviewExtras = meetLink;
+						}
+					} catch (meetErr) {
+						console.error("Auto Meet link generation failed:", meetErr);
+					}
+				}
 				break;
 			case "Selected":
 				updateData.shortlist = true;
 				updateData.interviews = true;
 				updateData.interviews2 = true;
 				updateData.selectedCandidates = true;
+
+				const existingAppSel = await JobApplication.findById(applicationId);
+				if (existingAppSel && (!existingAppSel.offerLetterDate || date || time)) {
+					updateData.offerLetterDate = date || new Date().toISOString().split("T")[0];
+					updateData.offerLetterTime = time ? convertTo12HourFormat(time) : "12:00 PM";
+				}
 				break;
 			case "Rejected":
 				updateData.selectedCandidates = false;
