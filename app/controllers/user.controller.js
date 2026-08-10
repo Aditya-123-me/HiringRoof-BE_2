@@ -51,7 +51,7 @@ userController.addRescheduleRequest = async (req, res) => {
 
 userController.login = async (req, res) => {
 	try {
-		let { phone } = req.body;
+		let { phone, userType } = req.body;
 		if (!phone) return res.status(404).send({ status: false, msg: "Please provide a number !!" });
 
 		const { normalizePhone } = require("../util/normalizeCandidateData");
@@ -67,19 +67,34 @@ userController.login = async (req, res) => {
 		const otp = Math.floor(Math.random() * (max - min + 1)) + min;
 
 		if (findNumber) {
+			// Validate role mismatch if userType is passed
+			if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
+				const reqRole = userType.trim();
+				const dbRole = findNumber.userType.trim();
+				const isRecruiter = (r) => ["companyRecruiter", "individualRecruiter", "company"].includes(r);
+				const isCandidate = (r) => r === "jobSeeker";
+
+				if ((isCandidate(reqRole) && isRecruiter(dbRole)) || (isRecruiter(reqRole) && isCandidate(dbRole))) {
+					return res.status(400).send({
+						status: false,
+						msg: `This phone number is registered as a ${isRecruiter(dbRole) ? "Recruiter" : "Candidate"}. Please log in using the correct portal.`,
+					});
+				}
+			}
+
 			await User.findByIdAndUpdate(findNumber._id, { otp }, { new: true });
 
 			if (findNumber.blocked_status)
 				return res.status(404).send({
 					status: false,
-					msg: "This account is disabled, please contact  the administrator.",
+					msg: "This account is disabled, please contact the administrator.",
 					otp: 0,
 					firstTime: false,
 				});
 
 			return res.status(200).send({ status: true, otp, firstTime: false, msg: "Otp send successfully !!" });
 		} else {
-			await User.create({ phone, otp });
+			await User.create({ phone, otp, userType: userType || "jobSeeker" });
 			return res.status(200).send({ status: true, otp, firstTime: true, msg: "Otp send successfully !!" });
 		}
 	} catch (error) {
@@ -99,8 +114,24 @@ userController.verify = async (req, res, io) => {
 		const findNumber = await User.findOne({ phone, otp });
 		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone or OTP is wrong, Please try again !!" });
 
+		// Validate role mismatch on OTP verification
+		if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
+			const reqRole = userType.trim();
+			const dbRole = findNumber.userType.trim();
+			const isRecruiter = (r) => ["companyRecruiter", "individualRecruiter", "company"].includes(r);
+			const isCandidate = (r) => r === "jobSeeker";
+
+			if ((isCandidate(reqRole) && isRecruiter(dbRole)) || (isRecruiter(reqRole) && isCandidate(dbRole))) {
+				return res.status(400).send({
+					status: false,
+					msg: `Role Mismatch: Account is registered as ${isRecruiter(dbRole) ? "Recruiter" : "Candidate"}. Please use the correct portal.`,
+				});
+			}
+		}
+
 		let update;
-		if (userType && userType.trim())
+		// Only set userType if it is NOT set yet on the existing user account
+		if (userType && userType.trim() && !findNumber.userType)
 			update = await User.findByIdAndUpdate(
 				findNumber._id,
 				{ $set: { otp: "", userType, profileComplete: 10 } },
