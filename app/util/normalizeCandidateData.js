@@ -159,10 +159,56 @@ const normalizeHeaders = (headers) => {
 	});
 };
 
+const calculateProfileComplete = (userObj) => {
+	if (!userObj) return 0;
+	
+	const isRecruiter = ["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(userObj.userType);
+
+	let score = 10; // Base score
+
+	const hasVal = (val) => {
+		if (val === undefined || val === null) return false;
+		if (typeof val === "string") return val.trim() !== "";
+		if (Array.isArray(val)) return val.length > 0;
+		if (typeof val === "number") return !isNaN(val) && val > 0;
+		return Boolean(val);
+	};
+
+	if (hasVal(userObj.name)) score += 10;
+	if (hasVal(userObj.alternativePhone)) score += 10;
+	if (hasVal(userObj.email)) score += 10;
+	if (hasVal(userObj.profileImage)) score += isRecruiter ? 10 : 5;
+	if (hasVal(userObj.location)) score += isRecruiter ? 10 : 5;
+	if (hasVal(userObj.about)) score += isRecruiter ? 0 : 5;
+
+	if (isRecruiter) {
+		if (hasVal(userObj.companyName)) score += 5;
+		if (hasVal(userObj.aboutCompany)) score += 5;
+		if (hasVal(userObj.companyLogo)) score += 10;
+		if (hasVal(userObj.companyEmail)) score += 10;
+		if (hasVal(userObj.companyPhone)) score += 10;
+		if (hasVal(userObj.companyAlternativePhone)) score += 10;
+	} else {
+		// Candidate / jobSeeker
+		if (hasVal(userObj.profession)) score += 5;
+		if (hasVal(userObj.videoUrl)) score += 10;
+		if (hasVal(userObj.skills)) score += 10;
+		if (hasVal(userObj.experience)) score += 5;
+		if (hasVal(userObj.resume)) score += 10;
+		if (hasVal(userObj.letter)) score += 5;
+		if (hasVal(userObj.projects)) score += 5;
+		if (hasVal(userObj.education)) score += 5;
+	}
+
+	return Math.min(100, score);
+};
+
 module.exports = {
 	normalizePhone,
 	normalizeSkills,
 	normalizeEducation,
 	normalizeProjects,
-	normalizeHeaders
+	normalizeHeaders,
+	calculateProfileComplete
 };
+

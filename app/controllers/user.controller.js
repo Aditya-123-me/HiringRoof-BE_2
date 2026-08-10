@@ -66,18 +66,24 @@ userController.login = async (req, res) => {
 		const max = 999999;
 		const otp = Math.floor(Math.random() * (max - min + 1)) + min;
 
+		const isRecruiterRole = (r) => ["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(r);
+		const isCandidateRole = (r) => r === "jobSeeker";
+
 		if (findNumber) {
-			// Validate role mismatch if userType is passed
-			if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
+			// Validate role mismatch if userType is passed and existing user has a registered role & profile
+			if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim() && (findNumber.profileComplete || findNumber.name)) {
 				const reqRole = userType.trim();
 				const dbRole = findNumber.userType.trim();
-				const isRecruiter = (r) => ["companyRecruiter", "individualRecruiter", "company"].includes(r);
-				const isCandidate = (r) => r === "jobSeeker";
 
-				if ((isCandidate(reqRole) && isRecruiter(dbRole)) || (isRecruiter(reqRole) && isCandidate(dbRole))) {
+				const isReqRec = isRecruiterRole(reqRole);
+				const isReqCand = isCandidateRole(reqRole);
+				const isDbRec = isRecruiterRole(dbRole);
+				const isDbCand = isCandidateRole(dbRole);
+
+				if ((isReqCand && isDbRec) || (isReqRec && isDbCand)) {
 					return res.status(400).send({
 						status: false,
-						msg: `This phone number is registered as a ${isRecruiter(dbRole) ? "Recruiter" : "Candidate"}. Please log in using the correct portal.`,
+						msg: `This phone number is registered as a ${isDbRec ? "Recruiter" : "Candidate"}. Please log in using the correct portal.`,
 					});
 				}
 			}
@@ -94,7 +100,8 @@ userController.login = async (req, res) => {
 
 			return res.status(200).send({ status: true, otp, firstTime: false, msg: "Otp send successfully !!" });
 		} else {
-			await User.create({ phone, otp, userType: userType || "jobSeeker" });
+			// For new registrations, only set userType if explicitly provided (e.g. from candidate login form)
+			await User.create({ phone, otp, userType: userType ? userType.trim() : "" });
 			return res.status(200).send({ status: true, otp, firstTime: true, msg: "Otp send successfully !!" });
 		}
 	} catch (error) {
@@ -114,27 +121,35 @@ userController.verify = async (req, res, io) => {
 		const findNumber = await User.findOne({ phone, otp });
 		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone or OTP is wrong, Please try again !!" });
 
-		// Validate role mismatch on OTP verification
-		if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
+		const isRecruiterRole = (r) => ["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(r);
+		const isCandidateRole = (r) => r === "jobSeeker";
+
+		// Validate role mismatch on OTP verification for fully registered accounts
+		if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim() && (findNumber.profileComplete || findNumber.name)) {
 			const reqRole = userType.trim();
 			const dbRole = findNumber.userType.trim();
-			const isRecruiter = (r) => ["companyRecruiter", "individualRecruiter", "company"].includes(r);
-			const isCandidate = (r) => r === "jobSeeker";
 
-			if ((isCandidate(reqRole) && isRecruiter(dbRole)) || (isRecruiter(reqRole) && isCandidate(dbRole))) {
+			const isReqRec = isRecruiterRole(reqRole);
+			const isReqCand = isCandidateRole(reqRole);
+			const isDbRec = isRecruiterRole(dbRole);
+			const isDbCand = isCandidateRole(dbRole);
+
+			if ((isReqCand && isDbRec) || (isReqRec && isDbCand)) {
 				return res.status(400).send({
 					status: false,
-					msg: `Role Mismatch: Account is registered as ${isRecruiter(dbRole) ? "Recruiter" : "Candidate"}. Please use the correct portal.`,
+					msg: `Role Mismatch: Account is registered as ${isDbRec ? "Recruiter" : "Candidate"}. Please use the correct portal.`,
 				});
 			}
 		}
 
 		let update;
-		// Only set userType if it is NOT set yet on the existing user account
-		if (userType && userType.trim() && !findNumber.userType)
+		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
+		const currentScore = calculateProfileComplete(findNumber);
+		// Set userType if provided and account does not have a final userType or complete profile yet
+		if (userType && userType.trim() && (!findNumber.userType || !findNumber.profileComplete))
 			update = await User.findByIdAndUpdate(
 				findNumber._id,
-				{ $set: { otp: "", userType, profileComplete: 10 } },
+				{ $set: { otp: "", userType: userType.trim(), profileComplete: Math.max(10, currentScore) } },
 				{ new: true }
 			);
 		else update = await User.findByIdAndUpdate(findNumber._id, { $set: { otp: "" } }, { new: true });
@@ -522,115 +537,9 @@ userController.update = async (req, res, io) => {
 			io.emit(`notifications_${data.receiverId._id}`, data);
 		}
 
-		// NOTE: Profile Complete Logic 👇👇
-		let phone = 0;
-		let name = 0;
-		let alternativePhone = 0;
-		let email = 0;
-		let profileImage = 0;
-		let location = 0;
-		let gender = 0;
-		let dob = 0;
-		let about = 0;
-
-		//  jobSeeker
-		let profession = 0;
-		let videoUrl = 0;
-		let currentPay = 0;
-		let expectationPay = 0;
-		let skills = 0;
-		let experience = 0;
-		let resume = 0;
-		let letter = 0;
-		let projects = 0;
-		let education = 0;
-
-		// companyRecruiter && individualRecruiter
-		let companyName = 0;
-		let aboutCompany = 0;
-		let companyLogo = 0;
-		let companyType = 0;
-		let companyEmail = 0;
-		let companyPhone = 0;
-		let companyAlternativePhone = 0;
-
-		// individualRecruiter" "companyRecruiter"
-		if (updatedUser.userType === "jobSeeker") {
-			if (updatedUser.name !== "") name = 10;
-			if (updatedUser.alternativePhone !== "") alternativePhone = 10;
-			if (updatedUser.email !== "") email = 10;
-			if (updatedUser.profileImage !== "") profileImage = 5;
-			if (updatedUser.location !== "") location = 5;
-			if (updatedUser.gender !== "") gender = 0;
-			if (updatedUser.dob !== "") dob = 0;
-			if (updatedUser.about !== "") about = 5;
-			if (updatedUser.profession !== "") profession = 0;
-			if (updatedUser.videoUrl !== "") videoUrl = 10;
-			if (updatedUser.currentPay !== "") currentPay = 0;
-			if (updatedUser.expectationPay !== "") expectationPay = 0;
-			if (updatedUser.skills.length > 0) skills = 10;
-			if (updatedUser.experience !== "") experience = 5;
-			if (updatedUser.resume !== "") resume = 10;
-			if (updatedUser.letter !== "") letter = 5;
-			if (updatedUser.projects.length > 0) projects = 5;
-			if (updatedUser.education.length > 0) education = 0;
-
-			updatedUser.profileComplete =
-				10 +
-				name +
-				alternativePhone +
-				email +
-				profileImage +
-				location +
-				gender +
-				dob +
-				about +
-				profession +
-				videoUrl +
-				currentPay +
-				expectationPay +
-				skills +
-				experience +
-				resume +
-				letter +
-				projects +
-				education;
-		} else {
-			if (updatedUser.name !== "") name = 10;
-			if (updatedUser.alternativePhone !== "") alternativePhone = 10;
-			if (updatedUser.email !== "") email = 10;
-			if (updatedUser.profileImage !== "") profileImage = 10;
-			if (updatedUser.location !== "") location = 10;
-			if (updatedUser.gender !== "") gender = 0;
-			if (updatedUser.dob !== "") dob = 0;
-			if (updatedUser.about !== "") about = 0;
-			if (updatedUser.companyName !== "") companyName = 5;
-			if (updatedUser.aboutCompany !== "") aboutCompany = 5;
-			if (updatedUser.companyLogo !== "") companyLogo = 10;
-			if (updatedUser.companyType !== "") companyType = 0;
-			if (updatedUser.companyEmail !== "") companyEmail = 10;
-			if (updatedUser.companyPhone !== "") companyPhone = 10;
-			if (updatedUser.companyAlternativePhone !== "") companyAlternativePhone = 10;
-
-			updatedUser.profileComplete =
-				10 +
-				name +
-				alternativePhone +
-				email +
-				profileImage +
-				location +
-				gender +
-				dob +
-				about +
-				companyName +
-				aboutCompany +
-				companyLogo +
-				companyType +
-				companyEmail +
-				companyPhone +
-				companyAlternativePhone;
-		}
-
+		// NOTE: Profile Complete Calculation
+		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
+		updatedUser.profileComplete = calculateProfileComplete(updatedUser);
 		await updatedUser.save();
 
 		return res.status(200).json({ status: true, user: updatedUser, msg: "User updated successfully !!" });
@@ -648,10 +557,11 @@ userController.projects = async (req, res) => {
 		const user = await User.findOne({ _id });
 		if (!user) return res.status(404).json({ status: false, msg: "User doesn't exits !!" });
 
-		if (user.projects.length === 0) user.profileComplete += 5;
-		await user.save();
-
+		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
 		const updatedUser = await User.findByIdAndUpdate({ _id }, { $set: { projects: bodyData } }, { new: true });
+		updatedUser.profileComplete = calculateProfileComplete(updatedUser);
+		await updatedUser.save();
+
 		return res.status(200).json({ status: true, user: updatedUser, msg: "User updated successfully !!" });
 	} catch (error) {
 		console.log(error);
@@ -664,7 +574,11 @@ userController.education = async (req, res) => {
 		const { _id } = req.params;
 		const bodyData = req.body;
 
+		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
 		const updatedUser = await User.findByIdAndUpdate({ _id }, { $set: { education: bodyData } }, { new: true });
+		updatedUser.profileComplete = calculateProfileComplete(updatedUser);
+		await updatedUser.save();
+
 		return res.status(200).json({ status: true, user: updatedUser, msg: "User updated successfully !!" });
 	} catch (error) {
 		console.log(error);
@@ -706,8 +620,9 @@ userController.getToken = async (req, res) => {
 		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone is wrong, Please try again !!" });
 
 		let update;
+		const { calculateProfileComplete: calcScore } = require("../util/normalizeCandidateData");
 		if (userType.trim())
-			update = await User.findByIdAndUpdate(findNumber._id, { $set: { userType, profileComplete: 5 } }, { new: true });
+			update = await User.findByIdAndUpdate(findNumber._id, { $set: { userType, profileComplete: Math.max(10, calcScore(findNumber)) } }, { new: true });
 		else update = await User.findByIdAndUpdate(findNumber._id, { $set: { otp: "" } }, { new: true });
 
 		const token = jwt.sign({ _id: update._id }, JWT_SECRET, {
@@ -738,14 +653,14 @@ userController.removeVideo = async (req, res) => {
 		if (user.videoUrl === "") return res.status(404).json({ status: false, msg: "User doesn't have a video !!" });
 
 		const deleteResponse = await deleteFromFirebase(user.videoUrl);
-		if (!deleteResponse) throw Error("Error in deleting video from firebase");
+		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
 		user.videoUrl = "";
-		user.profileComplete -= 10;
+		user.profileComplete = calculateProfileComplete(user);
 		await user.save();
 
 		return res.status(200).send({
 			status: true,
-			msg: "Video successfully !!",
+			msg: "Video deleted successfully !!",
 			data: user,
 		});
 	} catch (error) {
@@ -766,8 +681,8 @@ userController.removeProfile = async (req, res) => {
 		if (!deleteResponse) throw Error("Error in deleting profile image from firebase");
 		user.profileImage =
 			"https://firebasestorage.googleapis.com/v0/b/hiringroof.appspot.com/o/static%20data%2FAvtar.png?alt=media&token=5a84bf05-8bec-4f7b-b9f3-deb8205b8cef";
-		if (user.userType === "jobSeeker") user.profileComplete -= 5;
-		else user.profileComplete -= 10;
+		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
+		user.profileComplete = calculateProfileComplete(user);
 		await user.save();
 
 		return res.status(200).send({

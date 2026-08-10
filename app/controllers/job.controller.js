@@ -699,7 +699,8 @@ jobController.bulkUpload = async (req, res) => {
 			normalizeSkills,
 			normalizeEducation,
 			normalizeProjects,
-			normalizeHeaders
+			normalizeHeaders,
+			calculateProfileComplete
 		} = require("../util/normalizeCandidateData");
 
 		// Extract headers from the first row and normalize them to schema keys
@@ -733,6 +734,7 @@ jobController.bulkUpload = async (req, res) => {
 
 			obj.userType = "jobSeeker";
 			obj.registrationSource = "bulk";
+			obj.profileComplete = calculateProfileComplete(obj);
 			return obj;
 		});
 
@@ -747,6 +749,9 @@ jobController.bulkUpload = async (req, res) => {
 
 			if (!user) {
 				user = await User.create(candidate);
+			} else {
+				// Update existing user with uploaded details & new completion score
+				user = await User.findByIdAndUpdate(user._id, { $set: candidate }, { new: true });
 			}
 
 			// Check if application exists
@@ -805,7 +810,8 @@ jobController.singleUpload = async (req, res) => {
 			normalizePhone,
 			normalizeSkills,
 			normalizeEducation,
-			normalizeProjects
+			normalizeProjects,
+			calculateProfileComplete
 		} = require("../util/normalizeCandidateData");
 
 		if (userData) {
@@ -815,6 +821,7 @@ jobController.singleUpload = async (req, res) => {
 			if (userData.education) userData.education = normalizeEducation(userData.education);
 			userData.userType = "jobSeeker";
 			userData.registrationSource = "single";
+			userData.profileComplete = calculateProfileComplete(userData);
 		}
 
 		// Find or create user
@@ -822,6 +829,8 @@ jobController.singleUpload = async (req, res) => {
 
 		if (!user) {
 			user = await User.create(userData);
+		} else if (userData) {
+			user = await User.findByIdAndUpdate(user._id, { $set: userData }, { new: true });
 		}
 
 		

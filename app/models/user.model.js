@@ -9,7 +9,6 @@ const userSchema = mongoose.Schema(
 		userType: {
 			type: String,
 			required: true,
-			default: "jobSeeker",
 			enum: ["jobSeeker", "individualRecruiter", "companyRecruiter"],
 		},
 		otp: { type: Number, default: "" },
@@ -124,4 +123,15 @@ const userSchema = mongoose.Schema(
 	{ timestamps: true }
 );
 
+userSchema.pre("save", function (next) {
+	try {
+		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
+		this.profileComplete = calculateProfileComplete(this);
+	} catch (e) {
+		console.error("Error in user pre-save profileComplete calculation:", e);
+	}
+	next();
+});
+
 module.exports = mongoose.model("users", userSchema);
+
