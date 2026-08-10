@@ -1125,6 +1125,7 @@ jobApplication.selected = async (req, res, io) => {
 		findUser.status = "Selected";
 		findUser.response = "Selected";
 		findUser.selectedBadge = true;
+		findUser.selectionCount = (findUser.selectionCount || 0) + 1;
 		if (!findUser.selectedIn.some(item => item.job && item.job.toString() === application.jobId.toString())) {
 			findUser.selectedIn.push({ job: application.jobId, date: new Date() });
 		}
@@ -2000,6 +2001,7 @@ jobApplication.selectedAdminSide = async (req, res, io) => {
 			findUser.status = "Selected";
 			findUser.response = "Selected";
 			findUser.selectedBadge = true;
+			findUser.selectionCount = (findUser.selectionCount || 0) + 1;
 			if (!findUser.selectedIn.some(item => item.job && item.job.toString() === application.jobId.toString())) {
 				findUser.selectedIn.push({ job: application.jobId, date: new Date() });
 			}
@@ -2212,6 +2214,7 @@ jobApplication.updatePipelineStatus = async (req, res) => {
 				// Mark as selected globally, add to selectedIn history (using $addToSet or push unique)
 				await User.findByIdAndUpdate(application.applicantId, {
 					$set: { selectedBadge: true },
+					$inc: { selectionCount: 1 },
 					$addToSet: { selectedIn: { job: application.jobId } }
 				});
 			} else {

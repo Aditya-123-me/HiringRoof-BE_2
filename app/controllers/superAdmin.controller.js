@@ -532,11 +532,19 @@ superAdmin.updateCandidateSelection = async (req, res) => {
 		const updateOps = {};
 
 		if (selectedBadge !== undefined) {
-			updateOps.$set = { selectedBadge: Boolean(selectedBadge) };
+			const isTrue = Boolean(selectedBadge);
+			updateOps.$set = { selectedBadge: isTrue };
+			if (isTrue) {
+				updateOps.$inc = { selectionCount: 1 };
+			} else {
+				updateOps.$inc = { badgeRemovedCount: 1 };
+			}
 		}
 
 		if (jobIdToPush && mongoose.Types.ObjectId.isValid(jobIdToPush)) {
 			updateOps.$addToSet = { selectedIn: { job: jobIdToPush, date: new Date() } };
+			if (!updateOps.$inc) updateOps.$inc = {};
+			updateOps.$inc.selectionCount = 1;
 		}
 
 		if (jobIdToRemove && mongoose.Types.ObjectId.isValid(jobIdToRemove)) {

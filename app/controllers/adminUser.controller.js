@@ -1,5 +1,6 @@
 const adminUserModel = require("../models/adminUser.model");
 const RejectedInterview = require("../models/rejected.model");
+const BadgeRemoveRequestModel = require("../models/BadgeRemoveRequest.model");
 const { imageUpload } = require("../util/googleDrive.util");
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET } = require("../config/config");
@@ -813,4 +814,130 @@ adminUser.rejectInterview = async (req, res, io) => {
 	}
 };
 
+/**
+ * GET /adminUser/badge-remove-requests
+ * Query: { status: "PENDING" | "APPROVED" | "REJECTED" | "", page, limit }
+ * Fetches all badge removal requests for SuperAdmin with candidate selection statistics
+ */
+adminUser.getAllBadgeRemoveRequests = async (req, res) => {
+	try {
+		const { status, page = 1, limit = 20 } = req.query;
+
+		const filter = {};
+		if (status && ["PENDING", "APPROVED", "REJECTED"].includes(status.toUpperCase())) {
+			filter.status = status.toUpperCase();
+		}
+
+		const skip = (Number(page) - 1) * Number(limit);
+
+		const [requests, total] = await Promise.all([
+			BadgeRemoveRequestModel.find(filter)
+				.populate("requestedBy", "name email phone profileImage selectedBadge selectionCount badgeRemovedCount selectedIn createdAt")
+				.populate("servicedBy", "name email type")
+				.skip(skip)
+				.limit(Number(limit))
+				.sort({ createdAt: -1 }),
+			BadgeRemoveRequestModel.countDocuments(filter),
+		]);
+
+		return res.status(200).json({
+			status: true,
+			total,
+			page: Number(page),
+			pages: Math.ceil(total / Number(limit)),
+			data: requests,
+		});
+	} catch (error) {
+		console.error("Error in getAllBadgeRemoveRequests:", error);
+		return res.status(500).json({ status: false, message: error.message });
+	}
+};
+
+/**
+ * GET /adminUser/badge-remove-request/:id
+ * Fetches a single badge removal request with complete candidate selection details
+ */
+adminUser.getSingleBadgeRemoveRequest = async (req, res) => {
+	try {
+		const { id } = req.params;
+
+		const request = await BadgeRemoveRequestModel.findById(id)
+			.populate({
+				path: "requestedBy",
+				select: "name email phone profileImage profession location selectedBadge selectionCount badgeRemovedCount selectedIn createdAt",
+				populate: {
+					path: "selectedIn.job",
+					select: "jobTittle companyName location pay payType",
+				},
+			})
+			.populate("servicedBy", "name email type");
+
+		if (!request) {
+			return res.status(404).json({ status: false, message: "Badge removal request not found" });
+		}
+
+		return res.status(200).json({
+			status: true,
+			data: request,
+		});
+	} catch (error) {
+		console.error("Error in getSingleBadgeRemoveRequest:", error);
+		return res.status(500).json({ status: false, message: error.message });
+	}
+};
+
+/**
+ * PUT /adminUser/handle-badge-remove-request/:id
+ * Body: { action: "APPROVE" | "REJECT", adminComment }
+ * SuperAdmin accepts or rejects a candidate's badge removal request
+ */
+adminUser.handleBadgeRemoveRequest = async (req, res) => {
+	try {
+		const { id } = req.params;
+		const { action, adminComment } = req.body;
+
+		if (!action || !["APPROVE", "REJECT"].includes(action.toUpperCase())) {
+			return res.status(400).json({ status: false, message: "Action must be APPROVE or REJECT" });
+		}
+
+		const request = await BadgeRemoveRequestModel.findById(id);
+		if (!request) {
+			return res.status(404).json({ status: false, message: "Badge removal request not found" });
+		}
+
+		if (request.status !== "PENDING") {
+			return res.status(400).json({
+				status: false,
+				message: `Request has already been ${request.status.toLowerCase()}`,
+			});
+		}
+
+		const isApprove = action.toUpperCase() === "APPROVE";
+		request.status = isApprove ? "APPROVED" : "REJECTED";
+		request.servicedBy = req.user._id;
+		request.requestHandledOn = new Date();
+		request.adminComment = adminComment || "";
+
+		await request.save();
+
+		// If approved, update candidate's badge and increment badgeRemovedCount
+		if (isApprove) {
+			await User.findByIdAndUpdate(request.requestedBy, {
+				$set: { selectedBadge: false },
+				$inc: { badgeRemovedCount: 1 },
+			});
+		}
+
+		return res.status(200).json({
+			status: true,
+			message: `Badge removal request ${isApprove ? "APPROVED" : "REJECTED"} successfully`,
+			data: request,
+		});
+	} catch (error) {
+		console.error("Error in handleBadgeRemoveRequest:", error);
+		return res.status(500).json({ status: false, message: error.message });
+	}
+};
+
 module.exports = adminUser;
+

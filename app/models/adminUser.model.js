@@ -5,7 +5,7 @@ const adminUserSchema = mongoose.Schema(
 		name: { type: String, default: "", required: true },
 		email: { type: String, required: true, unique: true },
 		password: { type: String, required: true },
-		profileImage: {
+		profileImage: { 
 			type: String,
 			default:
 				"https://drive.google.com/uc?export=download&id=1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
@@ -39,6 +39,7 @@ const adminUserSchema = mongoose.Schema(
 		],
 		isActive: { type: Boolean, default: true },
 		isDeleted: { type: Boolean, default: false },
+		
 	},
 	{ timestamps: true }
 );

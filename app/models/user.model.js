@@ -104,14 +104,22 @@ const userSchema = mongoose.Schema(
 		{
 			type:Boolean,
 			default:false
-		},
+		}, 
 		selectedIn:[{
 			job:{type: mongoose.Schema.Types.ObjectId, ref: "jobs", default: null},
 			date:{
 				type:Date,
 				default:Date.now
 			}
-		}]
+		}],
+		selectionCount: {
+			type: Number,
+			default: 0
+		},
+		badgeRemovedCount: {
+			type: Number,
+			default: 0
+		}
 	},
 	{ timestamps: true }
 );

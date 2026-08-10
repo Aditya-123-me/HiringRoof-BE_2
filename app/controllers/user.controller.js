@@ -11,6 +11,7 @@ const { getVideoDurationInSeconds } = require("get-video-duration");
 const fs = require("fs");
 const jobModel = require("../models/job.model");
 const convertTo12HourFormat = require("../util/convertTo12HourFormat");
+const BadgeRemoveRequestModel = require("../models/BadgeRemoveRequest.model");
 
 const userController = {};
 
@@ -784,5 +785,70 @@ userController.blockUnblock = async (req, res) => {
 		res.status(500).send({ status: false, msg: error.message });
 	}
 };
+
+userController.addBadgeRemoveRequest = async (req, res) => {
+	try {
+		const user = req.user;
+		const { reason } = req.body;
+
+		// Check if user currently has a selected badge or selection history
+		const hasBadge = user.selectedBadge || (user.selectionCount && user.selectionCount > 0);
+		if (!hasBadge) {
+			return res.status(400).json({
+				status: false,
+				msg: "You do not have an active selected badge to request removal for.",
+			});
+		}
+
+		// Check for existing pending request
+		const existingReq = await BadgeRemoveRequestModel.findOne({
+			requestedBy: user._id,
+			status: "PENDING",
+		});
+		if (existingReq) {
+			return res.status(400).json({
+				status: false,
+				msg: "You already have a pending badge removal request.",
+			});
+		}
+
+		const removeReq = new BadgeRemoveRequestModel({
+			requestedBy: user._id,
+			reqReceivedOn: new Date(),
+			reason: reason || "",
+			status: "PENDING",
+		});
+
+		await removeReq.save();
+
+		return res.status(201).json({
+			status: true,
+			msg: "Badge removal request submitted successfully!",
+			data: removeReq,
+		});
+	} catch (error) {
+		console.error("Error in addBadgeRemoveRequest:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+userController.getMyBadgeRemoveRequests = async (req, res) => {
+	try {
+		const user = req.user;
+		const badgeRemReq = await BadgeRemoveRequestModel.find({ requestedBy: user._id })
+			.populate("servicedBy", "name email type")
+			.sort({ createdAt: -1 });
+
+		return res.status(200).json({
+			status: true,
+			msg: badgeRemReq.length > 0 ? "User badge removal requests fetched successfully" : "No badge removal requests found",
+			count: badgeRemReq.length,
+			data: badgeRemReq,
+		});
+	} catch (error) {
+		console.error("Error in getMyBadgeRemoveRequests:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 
 module.exports = userController;

@@ -38,4 +38,10 @@ module.exports = (router, io) => {
 	router.post("/adminUser/updateInterviewStatus", adminAuthorization, adminUser.updateInterviewStatus);
 
 	router.post("/adminUser/rejectInterview", adminAuthorization, (req, res) => adminUser.rejectInterview(req, res, io));
+
+	// SuperAdmin Badge Removal Request Management APIs
+	router.get("/adminUser/badge-remove-requests", adminAuthorization, adminUser.getAllBadgeRemoveRequests);
+	router.get("/adminUser/badge-remove-request/:id", adminAuthorization, adminUser.getSingleBadgeRemoveRequest);
+	router.put("/adminUser/handle-badge-remove-request/:id", adminAuthorization, adminUser.handleBadgeRemoveRequest);
 };
+
