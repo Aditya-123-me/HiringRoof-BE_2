@@ -16,8 +16,7 @@ const userSchema = mongoose.Schema(
 		email: { type: String, default: "" },
 		profileImage: {
 			type: String,
-			default:
-				"https://lh3.googleusercontent.com/d/1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
+			default: "",
 		},
 		location: { type: String, default: "" },
 		gender: { type: String, default: "" },

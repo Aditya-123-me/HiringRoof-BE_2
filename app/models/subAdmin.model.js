@@ -8,8 +8,7 @@ const subAdminUserSchema = mongoose.Schema(
 		type: { type: String, default: "sub-admin" },
 		profileImage: {
 			type: String,
-			default:
-				"https://drive.google.com/uc?export=download&id=1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
+			default: "",
 		},
 		number: { type: String, default: "", required: true },
 		address: { type: String, default: "" },

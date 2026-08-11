@@ -7,8 +7,7 @@ const adminUserSchema = mongoose.Schema(
 		password: { type: String, required: true },
 		profileImage: { 
 			type: String,
-			default:
-				"https://drive.google.com/uc?export=download&id=1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
+			default: "",
 		},
 		type: { type: String, required: true, enum: ["admin", "hr","sub-admin"] },
 		number: { type: String, default: "", required: true },
