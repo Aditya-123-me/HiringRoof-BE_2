@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
 const { JWT_SECRET } = require("../config/config");
 const adminUser = require("../models/adminUser.model");
+const subAdminUser = require("../models/subAdmin.model");
 
 const adminAuthorization = async (req, res, next) => {
 	try {
@@ -11,7 +12,7 @@ const adminAuthorization = async (req, res, next) => {
 
 		const verify = jwt.verify(token, JWT_SECRET);
 
-		req.user = await adminUser.findById(verify._id);
+		req.user = (await adminUser.findById(verify._id)) || (await subAdminUser.findById(verify._id));
 
 		if (req.user) next();
 		else
@@ -27,4 +28,5 @@ const adminAuthorization = async (req, res, next) => {
 		});
 	}
 };
+
 module.exports = adminAuthorization;

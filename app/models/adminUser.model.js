@@ -10,7 +10,7 @@ const adminUserSchema = mongoose.Schema(
 			default:
 				"https://drive.google.com/uc?export=download&id=1-3u9kwWOedcucn4Goqq-SXdXq8FlNRUl",
 		},
-		type: { type: String, required: true, enum: ["admin", "hr"] },
+		type: { type: String, required: true, enum: ["admin", "hr","sub-admin"] },
 		number: { type: String, default: "", required: true },
 		address: { type: String, default: "" },
 		userId: { type: String, unique: true },
