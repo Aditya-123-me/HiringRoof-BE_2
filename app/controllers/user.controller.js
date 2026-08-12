@@ -70,8 +70,8 @@ userController.login = async (req, res) => {
 		const isCandidateRole = (r) => r === "jobSeeker";
 
 		if (findNumber) {
-			// Validate role mismatch if userType is passed and existing user has a registered role & profile
-			if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim() && (findNumber.profileComplete || findNumber.name)) {
+			// Validate role mismatch: if userType is passed and existing user has a registered userType, block BEFORE generating OTP
+			if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
 				const reqRole = userType.trim();
 				const dbRole = findNumber.userType.trim();
 
@@ -88,8 +88,6 @@ userController.login = async (req, res) => {
 				}
 			}
 
-			await User.findByIdAndUpdate(findNumber._id, { otp }, { new: true });
-
 			if (findNumber.blocked_status)
 				return res.status(404).send({
 					status: false,
@@ -97,6 +95,8 @@ userController.login = async (req, res) => {
 					otp: 0,
 					firstTime: false,
 				});
+
+			await User.findByIdAndUpdate(findNumber._id, { otp }, { new: true });
 
 			return res.status(200).send({ status: true, otp, firstTime: false, msg: "Otp send successfully !!" });
 		} else {
@@ -124,8 +124,8 @@ userController.verify = async (req, res, io) => {
 		const isRecruiterRole = (r) => ["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(r);
 		const isCandidateRole = (r) => r === "jobSeeker";
 
-		// Validate role mismatch on OTP verification for fully registered accounts
-		if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim() && (findNumber.profileComplete || findNumber.name)) {
+		// Validate role mismatch on OTP verification
+		if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
 			const reqRole = userType.trim();
 			const dbRole = findNumber.userType.trim();
 
