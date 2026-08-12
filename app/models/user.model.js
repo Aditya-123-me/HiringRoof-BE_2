@@ -8,8 +8,8 @@ const userSchema = mongoose.Schema(
 		address: { type: String, default: "" },
 		userType: {
 			type: String,
-			required: true,
-			enum: ["jobSeeker", "individualRecruiter", "companyRecruiter"],
+			default: "jobSeeker",
+			enum: ["jobSeeker", "individualRecruiter", "companyRecruiter", "company", "recruiter"],
 		},
 		otp: { type: Number, default: "" },
 		name: { type: String, default: "" },
@@ -124,6 +124,8 @@ const userSchema = mongoose.Schema(
 
 userSchema.pre("save", function (next) {
 	try {
+		if (this.userType === "company") this.userType = "companyRecruiter";
+		if (this.userType === "recruiter") this.userType = "individualRecruiter";
 		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
 		this.profileComplete = calculateProfileComplete(this);
 	} catch (e) {

@@ -100,8 +100,12 @@ userController.login = async (req, res) => {
 
 			return res.status(200).send({ status: true, otp, firstTime: false, msg: "Otp send successfully !!" });
 		} else {
-			// For new registrations, only set userType if explicitly provided (e.g. from candidate login form)
-			await User.create({ phone, otp, userType: userType ? userType.trim() : "" });
+			// For new registrations, set normalized userType (defaulting to jobSeeker)
+			let finalUserType = userType && userType.trim() ? userType.trim() : "jobSeeker";
+			if (finalUserType === "company") finalUserType = "companyRecruiter";
+			if (finalUserType === "recruiter") finalUserType = "individualRecruiter";
+
+			await User.create({ phone, otp, userType: finalUserType });
 			return res.status(200).send({ status: true, otp, firstTime: true, msg: "Otp send successfully !!" });
 		}
 	} catch (error) {
@@ -598,7 +602,11 @@ userController.numberCheck = async (req, res) => {
 		if (findNumber) {
 			return res.status(200).send({ status: true, firstTime: false, msg: "This number is already registered !!" });
 		} else {
-			await User.create({ phone });
+			let finalUserType = req.body.userType && req.body.userType.trim() ? req.body.userType.trim() : "jobSeeker";
+			if (finalUserType === "company") finalUserType = "companyRecruiter";
+			if (finalUserType === "recruiter") finalUserType = "individualRecruiter";
+
+			await User.create({ phone, userType: finalUserType });
 			return res.status(200).send({ status: true, firstTime: true, msg: "This number is not registered" });
 		}
 	} catch (error) {
