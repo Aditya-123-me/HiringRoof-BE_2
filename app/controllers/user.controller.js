@@ -68,10 +68,17 @@ userController.login = async (req, res) => {
 
 		const isRecruiterRole = (r) => ["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(r);
 		const isCandidateRole = (r) => r === "jobSeeker";
+		const isRegisteredAccount = (u) => {
+			if (!u) return false;
+			const hasName = u.name && String(u.name).trim() !== "";
+			const hasEmail = u.email && String(u.email).trim() !== "";
+			const hasScore = u.profileComplete && Number(u.profileComplete) > 10;
+			return Boolean(hasName || hasEmail || hasScore);
+		};
 
 		if (findNumber) {
-			// Validate role mismatch: if userType is passed and existing user has a registered userType, block BEFORE generating OTP
-			if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
+			// Validate role mismatch ONLY if the account is fully registered with a profile
+			if (isRegisteredAccount(findNumber) && userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
 				const reqRole = userType.trim();
 				const dbRole = findNumber.userType.trim();
 
@@ -100,7 +107,7 @@ userController.login = async (req, res) => {
 
 			return res.status(200).send({ status: true, otp, firstTime: false, msg: "Otp send successfully !!" });
 		} else {
-			// For new registrations, set normalized userType (defaulting to jobSeeker)
+			// For new registrations, set userType if provided
 			let finalUserType = userType && userType.trim() ? userType.trim() : "jobSeeker";
 			if (finalUserType === "company") finalUserType = "companyRecruiter";
 			if (finalUserType === "recruiter") finalUserType = "individualRecruiter";
@@ -127,9 +134,16 @@ userController.verify = async (req, res, io) => {
 
 		const isRecruiterRole = (r) => ["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(r);
 		const isCandidateRole = (r) => r === "jobSeeker";
+		const isRegisteredAccount = (u) => {
+			if (!u) return false;
+			const hasName = u.name && String(u.name).trim() !== "";
+			const hasEmail = u.email && String(u.email).trim() !== "";
+			const hasScore = u.profileComplete && Number(u.profileComplete) > 10;
+			return Boolean(hasName || hasEmail || hasScore);
+		};
 
-		// Validate role mismatch on OTP verification
-		if (userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
+		// Validate role mismatch on OTP verification ONLY for registered accounts
+		if (isRegisteredAccount(findNumber) && userType && userType.trim() && findNumber.userType && findNumber.userType.trim()) {
 			const reqRole = userType.trim();
 			const dbRole = findNumber.userType.trim();
 
@@ -149,14 +163,22 @@ userController.verify = async (req, res, io) => {
 		let update;
 		const { calculateProfileComplete } = require("../util/normalizeCandidateData");
 		const currentScore = calculateProfileComplete(findNumber);
-		// Set userType if provided and account does not have a final userType or complete profile yet
-		if (userType && userType.trim() && (!findNumber.userType || !findNumber.profileComplete))
+		
+		// Normalize incoming userType if provided
+		let requestedUserType = userType && userType.trim() ? userType.trim() : "";
+		if (requestedUserType === "company") requestedUserType = "companyRecruiter";
+		if (requestedUserType === "recruiter") requestedUserType = "individualRecruiter";
+
+		// Set/update userType if provided and account is not fully registered yet
+		if (requestedUserType && (!isRegisteredAccount(findNumber) || !findNumber.userType)) {
 			update = await User.findByIdAndUpdate(
 				findNumber._id,
-				{ $set: { otp: "", userType: userType.trim(), profileComplete: Math.max(10, currentScore) } },
+				{ $set: { otp: "", userType: requestedUserType, profileComplete: Math.max(10, currentScore) } },
 				{ new: true }
 			);
-		else update = await User.findByIdAndUpdate(findNumber._id, { $set: { otp: "" } }, { new: true });
+		} else {
+			update = await User.findByIdAndUpdate(findNumber._id, { $set: { otp: "" } }, { new: true });
+		}
 
 		const token = jwt.sign({ _id: update._id }, JWT_SECRET, {
 			expiresIn: "60d",
