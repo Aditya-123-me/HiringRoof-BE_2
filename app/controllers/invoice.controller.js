@@ -188,6 +188,20 @@ const generateInvoice = async (req, res) => {
                 }
 
                 if (!res.headersSent) {
+                    const isDownload = String(req.query.download).toLowerCase() === "true";
+                    const isView = String(req.query.view).toLowerCase() === "true";
+
+                    if (isDownload || isView || !req.query.json) {
+                        res.setHeader("Content-Type", "application/pdf");
+                        res.setHeader(
+                            "Content-Disposition",
+                            isDownload
+                                ? `attachment; filename="HiringRoof-Invoice-${merchantTransactionId}.pdf"`
+                                : `inline; filename="HiringRoof-Invoice-${merchantTransactionId}.pdf"`
+                        );
+                        return res.send(pdfBuffer);
+                    }
+
                     return res.status(200).json({
                         status: true,
                         msg: "Invoice generated and sent successfully !!",
