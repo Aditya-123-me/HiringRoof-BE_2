@@ -390,23 +390,50 @@ jobController.getOneJob = async (req, res) => {
 
 jobController.search = async (req, res) => {
 	try {
-		const page = req.query.page >= 1 ? req.query.page : 1;
-		const limit = req.query.limit >= 1 ? req.query.limit : 6;
+		const page = parseInt(req.query.page) >= 1 ? parseInt(req.query.page) : 1;
+		const limit = parseInt(req.query.limit) >= 1 ? parseInt(req.query.limit) : 6;
 		const skip = limit * (page - 1);
 		const type = req.query.type ? req.query.type : "jobTitle";
 
 		const { query } = req.params;
+		const regex = new RegExp(query, "i");
 
-		const tittle = { $regex: query, $options: "i" };
-		const skillSubCategories = { $regex: query, $options: "i" };
-		const skills = { $regex: query, $options: "i" };
-		const workType = { $regex: query, $options: "i" };
-		const companyShortName = { $regex: query, $options: "i" };
+		let filterCondition = {};
 
-		let data = [];
-		let count = 0;
+		if (type === "jobTitle" || type === "jobTittle") {
+			filterCondition = { jobTittle: regex };
+		} else if (type === "skills") {
+			filterCondition = {
+				$or: [
+					{ skills: regex },
+					{ skillSubCategories: regex },
+					{ note: regex }
+				]
+			};
+		} else if (type === "workType") {
+			filterCondition = { workType: regex };
+		} else if (type === "companyShortName") {
+			filterCondition = {
+				$or: [
+					{ companyShortName: regex },
+					{ companyName: regex }
+				]
+			};
+		} else {
+			filterCondition = {
+				$or: [
+					{ jobTittle: regex },
+					{ skills: regex },
+					{ companyName: regex },
+					{ companyShortName: regex },
+					{ note: regex }
+				]
+			};
+		}
 
-		const tittleData = await Job.find({ tittle })
+		filterCondition.blocked_status = { $ne: true };
+
+		let data = await Job.find(filterCondition)
 			.limit(limit)
 			.skip(skip)
 			.sort({ createdAt: -1 })
@@ -415,76 +442,9 @@ jobController.search = async (req, res) => {
 				select: "name email phone profileImage userType",
 			})
 			.lean();
-		const tittleCount = await Job.countDocuments({ tittle });
 
-		const skillSubCategoriesData = await Job.find({ skillSubCategories })
-			.limit(limit)
-			.skip(skip)
-			.sort({ createdAt: -1 })
-			.populate({
-				path: "userId",
-				select: "name email phone profileImage userType",
-			})
-			.lean();
-		const skillSubCategoriesCount = await Job.countDocuments({ skillSubCategories });
-
-		const skillsData = await Job.find({ skills })
-			.limit(limit)
-			.skip(skip)
-			.sort({ createdAt: -1 })
-			.populate({
-				path: "userId",
-				select: "name email phone profileImage userType",
-			})
-			.lean();
-		const skillsCount = await Job.countDocuments({ skills });
-
-		const workTypeData = await Job.find({ workType })
-			.limit(limit)
-			.skip(skip)
-			.sort({ createdAt: -1 })
-			.populate({
-				path: "userId",
-				select: "name email phone profileImage userType",
-			})
-			.lean();
-		const workTypeCount = await Job.countDocuments({ workType });
-
-		const companyShortNameData = await Job.find({ companyShortName })
-			.limit(limit)
-			.skip(skip)
-			.sort({ createdAt: -1 })
-			.populate({
-				path: "userId",
-				select: "name email phone profileImage userType",
-			})
-			.lean();
-		const companyShortNameCount = await Job.countDocuments({ companyShortName });
-
-		if (tittleData.length > 0 && type === "jobTitle") {
-			data.push(...tittleData);
-			count += tittleCount;
-		}
-		if (skillSubCategoriesData.length > 0 && type === "skills") {
-			data.push(...skillSubCategoriesData);
-			count += skillSubCategoriesCount;
-		}
-		if (skillsData.length > 0 && type === "skills") {
-			data.push(...skillsData);
-			count += skillsCount;
-		}
-		if (workTypeData.length > 0 && type === "workType") {
-			data.push(...workTypeData);
-			count += workTypeCount;
-		}
-		if (companyShortNameData.length > 0 && type === "companyShortName") {
-			data.push(...companyShortNameData);
-			count += companyShortNameCount;
-		}
-
-		console.log(tittleCount, skillSubCategoriesCount, skillsCount, workTypeCount, companyShortNameCount);
-
-		data = data.filter((job) => !job.blocked_status);
+		const totalCount = await Job.countDocuments(filterCondition);
+		const pageCount = Math.ceil(totalCount / limit) || 1;
 
 		const jobs = [];
 		if (req.user) {
