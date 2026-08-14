@@ -6,7 +6,10 @@ const subAdminUser = require("../models/subAdmin.model");
 
 const adminAuthorization = async (req, res, next) => {
 	try {
-		const token = req.headers["authorization"];
+		let token = req.headers["authorization"] || req.query.token || req.query.auth;
+		if (token && token.startsWith("Bearer ")) {
+			token = token.slice(7).trim();
+		}
 
 		if (!token) return res.status(200).send({ success: false, msg: "A token is required for authentication !!" });
 

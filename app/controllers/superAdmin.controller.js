@@ -280,8 +280,9 @@ superAdmin.getStatistics = async (req, res) => {
 superAdmin.getManualPayments = async (req, res) => {
 	try {
 		const serviceModel = require("../models/service.model");
-		const status = req.query.status || "PENDING";
-		const payments = await serviceModel.find({ paymentStatus: status })
+		const status = req.query.status;
+		const query = status && status !== "ALL" ? { paymentStatus: status } : {};
+		const payments = await serviceModel.find(query)
 			.populate("userId", "name email phone profileImage userType")
 			.sort({ createdAt: -1 });
 
@@ -377,11 +378,11 @@ superAdmin.getPendingAddonJobs = async (req, res) => {
 		const serviceModel = require("../models/service.model");
 		const jobModel = require("../models/job.model");
 		
-		const status = req.query.status || "PENDING";
-		const payments = await serviceModel.find({
-			paymentStatus: status,
-			merchantTransactionId: { $regex: /^MANUAL_JOB_ADDON_/ }
-		})
+		const status = req.query.status;
+		const query = { merchantTransactionId: { $regex: /^MANUAL_JOB_ADDON_/ } };
+		if (status && status !== "ALL") query.paymentStatus = status;
+
+		const payments = await serviceModel.find(query)
 		.populate("userId", "name email phone profileImage userType")
 		.sort({ createdAt: -1 })
 		.lean();

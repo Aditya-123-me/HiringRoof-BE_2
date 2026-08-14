@@ -1,16 +1,21 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/user.model");
+const adminUser = require("../models/adminUser.model");
+const subAdminUser = require("../models/subAdmin.model");
 const { JWT_SECRET } = require("../config/config");
 
 const authorization = async (req, res, next) => {
 	try {
-		const token = req.headers["authorization"];
+		let token = req.headers["authorization"] || req.query.token || req.query.auth;
+		if (token && token.startsWith("Bearer ")) {
+			token = token.slice(7).trim();
+		}
 
 		if (!token) return res.status(200).send({ success: false, msg: "A token is required for authentication !!" });
 
 		const verify = jwt.verify(token, JWT_SECRET);
 
-		req.user = await User.findById(verify._id).select("-otp");
+		req.user = (await User.findById(verify._id).select("-otp")) || (await adminUser.findById(verify._id)) || (await subAdminUser.findById(verify._id));
 
 		if (req.user) next();
 		else
