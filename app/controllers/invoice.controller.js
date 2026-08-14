@@ -88,8 +88,9 @@ const generateInvoice = async (req, res) => {
         let buffers = [];
         doc.on("data", buffers.push.bind(buffers));
 
-        // Temporary file path for cloud upload
-        const tempFilePath = path.join(__dirname, `../../scratch/Invoice_${merchantTransactionId}.pdf`);
+        // Temporary file path for cloud upload (using OS temp directory)
+        const os = require("os");
+        const tempFilePath = path.join(os.tmpdir(), `Invoice_${merchantTransactionId}.pdf`);
         doc.pipe(fs.createWriteStream(tempFilePath));
 
         // HiringRoof Brand PDF Options (#7a19c8 theme)
