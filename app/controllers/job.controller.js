@@ -249,10 +249,15 @@ jobController.getJobs = async (req, res) => {
 			filters.tags = { $in: regexArray };
 		}
 
+		let sortOption = { createdAt: -1 };
+		if (req.query.sort === "popular") sortOption = { vacancies: -1, createdAt: -1 };
+		else if (req.query.sort === "highest_salary" || req.query.sort === "salary") sortOption = { pay: -1, createdAt: -1 };
+		else if (req.query.sort === "most_recent") sortOption = { createdAt: -1 };
+
 		const jobsData = await Job.find(filters)
 			.limit(limit)
 			.skip(skip)
-			.sort({ createdAt: -1 })
+			.sort(sortOption)
 			.populate({
 				path: "userId",
 				select: "name email phone profileImage userType",
@@ -303,10 +308,15 @@ jobController.getJobsAuth = async (req, res) => {
 			filters.tags = { $in: regexArray };
 		}
 
+		let sortOption = { createdAt: -1 };
+		if (req.query.sort === "popular") sortOption = { vacancies: -1, createdAt: -1 };
+		else if (req.query.sort === "highest_salary" || req.query.sort === "salary") sortOption = { pay: -1, createdAt: -1 };
+		else if (req.query.sort === "most_recent") sortOption = { createdAt: -1 };
+
 		const jobsData = await Job.find(filters)
 			.limit(limit)
 			.skip(skip)
-			.sort({ createdAt: -1 })
+			.sort(sortOption)
 			.populate({
 				path: "userId",
 				select: "name email phone profileImage userType",
@@ -1078,9 +1088,17 @@ jobController.generateJdPdf = async (req, res) => {
 
 		const doc = new PDFDocument({ margin: 50, size: "A4" });
 
+		const isDownload = String(req.query.download).toLowerCase() === "true";
+		const safeCompanyName = (job.companyName || job.companyShortName || "HiringRoof").replace(/\s+/g, "_");
+
 		// Set response headers for PDF stream
 		res.setHeader("Content-Type", "application/pdf");
-		res.setHeader("Content-Disposition", `inline; filename="JD_${job.companyName.replace(/\s+/g, "_")}.pdf"`);
+		res.setHeader(
+			"Content-Disposition",
+			isDownload
+				? `attachment; filename="JD_${safeCompanyName}.pdf"`
+				: `inline; filename="JD_${safeCompanyName}.pdf"`
+		);
 		doc.pipe(res);
 
 		// Draw background watermark (Hiring Roof logo/text watermark) - Enlarged & Violet
