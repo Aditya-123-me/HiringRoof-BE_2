@@ -310,10 +310,11 @@ superAdmin.verifyManualPayment = async (req, res) => {
 			jobId = service.merchantTransactionId.replace("MANUAL_JOB_ADDON_", "");
 		}
 
+
 		if (action === "APPROVE") {
 			service.paymentStatus = "APPROVED";
 			service.isPaymentSuccess = true;
-			service.isActive = true;
+			service.isActive = true; 
 
 			if (isJobAddon && jobId) {
 				const approvalDate = new Date();
@@ -336,6 +337,16 @@ superAdmin.verifyManualPayment = async (req, res) => {
 				service.expireDate = jobExpireStr;
 			}
 			await service.save();
+
+			// Trigger invoice PDF generation, upload & email delivery in background
+			try {
+				const { generateInvoice } = require("./invoice.controller");
+				const mockReq = { params: { merchantTransactionId: service.merchantTransactionId }, user: { _id: service.userId } };
+				const mockRes = { headersSent: true, status: () => ({ json: () => {} }), send: () => {} };
+				await generateInvoice(mockReq, mockRes);
+			} catch (invErr) {
+				console.error("Error generating invoice on manual payment approval:", invErr.message);
+			}
 
 			return res.status(200).json({ status: true, msg: "Manual payment approved successfully!", data: service });
 		} else if (action === "REJECT") {

@@ -49,7 +49,7 @@ paymentController.jobPostPayment = async (req, res, io) => {
 			merchantTransactionId: merchantTransactionId,
 			merchantUserId: `MUID${jobData.userId}`,
 			amount: amount,
-			redirectUrl: `http://localhost:5999/payment-status?id=${merchantTransactionId}&type=jobPost`,
+			redirectUrl: `https://hiringroof.hansrajventures.com/payment-status?id=${merchantTransactionId}&type=jobPost`,
 			redirectMode: "REDIRECT",
 			mobileNumber: req.user.phone,
 			paymentInstrument: {
@@ -61,7 +61,7 @@ paymentController.jobPostPayment = async (req, res, io) => {
 		paymentBody.userId = req.user._id;
 		paymentBody.email = req.user.email;
 		paymentBody.merchantTransactionId = merchantTransactionId;
-		paymentBody.type = "jobPost";
+		paymentBody.type = "jobPost"; 
 		paymentBody.contentData = jobData;
 		paymentBody.amount = amount / 100;
 		paymentBody.paymentPayload = payload;
@@ -140,7 +140,7 @@ paymentController.servicePayment = async (req, res, io) => {
 			merchantTransactionId: merchantTransactionId,
 			merchantUserId: `MUID${req.user._id}`,
 			amount: totalAmount,
-			redirectUrl: `http://localhost:5999/payment-status?id=${merchantTransactionId}&type=service`,
+			redirectUrl: `https://hiringroof.hansrajventures.com/payment-status?id=${merchantTransactionId}&type=service`,
 			redirectMode: "REDIRECT",
 			mobileNumber: req.user.phone,
 			paymentInstrument: {

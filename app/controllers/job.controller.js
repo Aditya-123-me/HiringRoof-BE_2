@@ -1065,10 +1065,10 @@ jobController.myPendingAddons = async (req, res) => {
 		console.error("Error in myPendingAddons:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
-};
+}; 
 
 jobController.generateJdPdf = async (req, res) => {
-	try {
+	try { 
 		const { id } = req.params;
 		const job = await Job.findById(id).lean();
 		if (!job) return res.status(404).json({ status: false, msg: "Job description not found!" });

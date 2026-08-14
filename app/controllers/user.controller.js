@@ -1,5 +1,5 @@
 const User = require("../models/user.model");
-	
+	 
 const jwt = require("jsonwebtoken");
 const extractSkillSub = require("../util/functions");
 const { JWT_SECRET } = require("../config/config");
