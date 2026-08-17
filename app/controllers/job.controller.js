@@ -407,6 +407,7 @@ jobController.search = async (req, res) => {
 				$or: [
 					{ skills: regex },
 					{ skillSubCategories: regex },
+					{ stream: regex },
 					{ note: regex }
 				]
 			};
@@ -424,6 +425,7 @@ jobController.search = async (req, res) => {
 				$or: [
 					{ jobTittle: regex },
 					{ skills: regex },
+					{ stream: regex },
 					{ companyName: regex },
 					{ companyShortName: regex },
 					{ note: regex }

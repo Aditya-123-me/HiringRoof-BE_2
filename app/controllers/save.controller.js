@@ -75,12 +75,14 @@ save.get = async (req, res) => {
 				data,
 			});
 
-		savedJob[0].jobId.map((e) => {
-			let isSaved = false;
+		savedJob[0].jobId.forEach((e) => {
+			if (!e) return;
+			let isSaved = true;
 			let isApplied = false;
 
-			if (e.isSaved === false) isSaved = true;
-			if (apply.length > 0) isApplied = apply.some((obj) => obj.jobId.toString() === e._id.toString());
+			if (apply.length > 0) {
+				isApplied = apply.some((obj) => obj.jobId.toString() === e._id.toString());
+			}
 
 			data.push({
 				...e,
