@@ -1235,5 +1235,28 @@ jobController.editJobPost = async (req, res) => {
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };
+jobController.getAllAvailableCategories = async(req,res)=>{
+	try {
+		const skills = await Job.distinct("skills", { blocked_status: { $ne: true }, isActive: true });
+		const skillSubCategories = await Job.distinct("skillSubCategories", { blocked_status: { $ne: true }, isActive: true });
+		const streams = await Job.distinct("stream", { blocked_status: { $ne: true }, isActive: true });
+
+		const uniqueSkills = [...new Set([...skills, ...skillSubCategories].map(s => typeof s === 'string' ? s.trim() : "").filter(Boolean))].sort();
+		const uniqueStreams = [...new Set(streams.map(s => typeof s === 'string' ? s.trim() : "").filter(Boolean))].sort();
+
+		return res.status(200).json({
+			status: true,
+			data: {
+				skills: uniqueSkills,
+				streams: uniqueStreams,
+				jobTypes: ["wfh", "wfo"],
+				workTypes: ["contractual", "part time", "full time", "internship", "hourly"]
+			}
+		});
+	} catch (error) {
+		console.error("Error in getAllAvailableCategories:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
 
 module.exports = jobController;
