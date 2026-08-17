@@ -18,6 +18,7 @@ module.exports = (router, io) => {
 
 	router.get("/job/all-after-login", authorization, jobController.getJobsAuth);
 
+	router.get("/job/categories", jobController.getAllAvailableCategories);
 	router.get("/job/:id", jobController.getOneJob);
 	router.get("/job/generate-jd-pdf/:id", jobController.generateJdPdf);
 
@@ -36,6 +37,4 @@ module.exports = (router, io) => {
 	router.post("/job/bulkUpload", adminAuthorization,upload.single("excelSheet"), jobController.bulkUpload);
 	router.post("/job/singleUpload", adminAuthorization, jobController.singleUpload);
 	router.put("/job/edit/:jobId", authorization, jobController.editJobPost);
-
-	router.get("/job/categories", jobController.getAllAvailableCategories);
 };
