@@ -1,0 +1,151 @@
+const Freelancer = require("../models/freelancer.model");
+const AdminUser = require("../models/adminUser.model");
+const bcrypt = require("bcrypt"); // assuming bcrypt is used for password hashing
+
+const freelancerController = {};
+
+// Freelancer applies for registration
+freelancerController.apply = async (req, res) => {
+	try {
+		const { name, email, phone, experience, resume, portfolioLink, about } = req.body;
+
+		if (!name || !email || !phone) {
+			return res.status(400).send({ status: false, msg: "Name, email, and phone are required!" });
+		}
+
+		// Check if application already exists
+		const existingFreelancer = await Freelancer.findOne({ email });
+		if (existingFreelancer) {
+			return res.status(400).send({ status: false, msg: "An application with this email already exists." });
+		}
+
+		// Check if an admin/HR account already exists with this email
+		const existingAdmin = await AdminUser.findOne({ email });
+		if (existingAdmin) {
+			return res.status(400).send({ status: false, msg: "An HR/Admin account with this email already exists." });
+		}
+
+		const newApplication = new Freelancer({
+			name,
+			email,
+			phone,
+			experience,
+			resume,
+			portfolioLink,
+			about,
+			status: "pending",
+		});
+
+		const savedApplication = await newApplication.save();
+
+		return res.status(201).send({
+			status: true,
+			msg: "Your application has been submitted successfully and is pending approval.",
+			data: savedApplication,
+		});
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+// Super Admin fetches all applications (can filter by status)
+freelancerController.getAllApplications = async (req, res) => {
+	try {
+		const { status } = req.query;
+		const filter = status ? { status } : {};
+
+		const applications = await Freelancer.find(filter).sort({ createdAt: -1 });
+		return res.status(200).send({
+			status: true,
+			msg: "Applications fetched successfully.",
+			data: applications,
+		});
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+// Super Admin approves the application
+freelancerController.approve = async (req, res) => {
+	try {
+		const { applicationId } = req.params;
+		const { password, badge } = req.body; // Super admin might set an initial password and select a badge
+
+		if (!password) {
+			return res.status(400).send({ status: false, msg: "Please provide an initial password for the HR admin account." });
+		}
+
+		const application = await Freelancer.findById(applicationId);
+		if (!application) {
+			return res.status(404).send({ status: false, msg: "Application not found." });
+		}
+
+		if (application.status === "approved") {
+			return res.status(400).send({ status: false, msg: "Application is already approved." });
+		}
+
+		// Create the actual adminUser account for this freelancer
+		const salt = await bcrypt.genSalt(10);
+		const hashedPassword = await bcrypt.hash(password, salt);
+
+		const newAdminUser = new AdminUser({
+			name: application.name,
+			email: application.email,
+			number: application.phone,
+			password: hashedPassword,
+			type: "hr", // They are registered as an HR admin
+			isActive: true,
+		});
+
+		const savedAdminUser = await newAdminUser.save();
+
+		// Update the application status
+		application.status = "approved";
+		application.adminUserId = savedAdminUser._id;
+		if (badge) application.badge = badge;
+		// application.approvedBy = req.user._id; // Assuming super admin user id is in req.user
+		application.approvalDate = new Date();
+
+		const updatedApplication = await application.save();
+
+		return res.status(200).send({
+			status: true,
+			msg: "Freelancer application approved and HR account created successfully.",
+			data: { application: updatedApplication, hrAccount: savedAdminUser },
+		});
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+// Super Admin rejects the application
+freelancerController.reject = async (req, res) => {
+	try {
+		const { applicationId } = req.params;
+		const { reason } = req.body;
+
+		const application = await Freelancer.findById(applicationId);
+		if (!application) {
+			return res.status(404).send({ status: false, msg: "Application not found." });
+		}
+
+		application.status = "rejected";
+		if (reason) application.rejectedReason = reason;
+
+		const updatedApplication = await application.save();
+
+		return res.status(200).send({
+			status: true,
+			msg: "Freelancer application has been rejected.",
+			data: updatedApplication,
+		});
+	} catch (error) {
+		console.log(error);
+		return res.status(500).send({ status: false, msg: error.message });
+	}
+};
+
+module.exports = freelancerController;
