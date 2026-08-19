@@ -1,6 +1,9 @@
 const Freelancer = require("../models/freelancer.model");
 const AdminUser = require("../models/adminUser.model");
 const bcrypt = require("bcrypt"); // assuming bcrypt is used for password hashing
+const sendMail = require("../util/sendMail.js");
+const { getApprovalMailTemplate } = require("../util/ApprovalMailTemplate");
+const { getRejectionMailTemplate } = require("../util/RejectionMailTemplate");
 
 const freelancerController = {};
 
@@ -110,6 +113,15 @@ freelancerController.approve = async (req, res) => {
 
 		const updatedApplication = await application.save();
 
+		// Send email notification with credentials
+		const emailHtml = getApprovalMailTemplate(
+			updatedApplication.name, 
+			updatedApplication.email, 
+			password, 
+			updatedApplication.badge || "Freelance Partner"
+		);
+		await sendMail(updatedApplication.email, "Welcome to HiringRoof! Your HR Account is Ready", emailHtml);
+
 		return res.status(200).send({
 			status: true,
 			msg: "Freelancer application approved and HR account created successfully.",
@@ -136,6 +148,10 @@ freelancerController.reject = async (req, res) => {
 		if (reason) application.rejectedReason = reason;
 
 		const updatedApplication = await application.save();
+
+		// Send rejection email notification
+		const emailHtml = getRejectionMailTemplate(updatedApplication.name, reason);
+		await sendMail(updatedApplication.email, "Update on your HiringRoof Application", emailHtml);
 
 		return res.status(200).send({
 			status: true,
