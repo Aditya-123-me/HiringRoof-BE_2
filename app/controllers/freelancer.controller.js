@@ -94,6 +94,10 @@ freelancerController.approve = async (req, res) => {
 		const salt = await bcrypt.genSalt(10);
 		const hashedPassword = await bcrypt.hash(password, salt);
 
+		// Generate unique userId like in adminUser.controller.js
+		const adminUserCount = await AdminUser.countDocuments();
+		const generatedUserId = `${application.name.split(" ")[0]}_${adminUserCount}`;
+
 		const newAdminUser = new AdminUser({
 			name: application.name,
 			email: application.email,
@@ -101,6 +105,8 @@ freelancerController.approve = async (req, res) => {
 			password: hashedPassword,
 			type: "hr", // They are registered as an HR admin
 			isActive: true,
+			userId: generatedUserId,
+			referralCode: generatedUserId,
 		});
 
 		const savedAdminUser = await newAdminUser.save();
