@@ -38,6 +38,8 @@ const adminUserSchema = mongoose.Schema(
 		],
 		isActive: { type: Boolean, default: true },
 		isDeleted: { type: Boolean, default: false },
+		isFreelancer: { type: Boolean, default: false },
+		badge: { type: String, default: "" },
 		
 	},
 	{ timestamps: true }

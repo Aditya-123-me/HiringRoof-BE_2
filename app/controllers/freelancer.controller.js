@@ -103,6 +103,8 @@ freelancerController.approve = async (req, res) => {
 			isActive: true,
 			userId: generatedUserId,
 			referralCode: generatedUserId,
+			isFreelancer: true,
+			badge: badge || "Freelance Partner",
 		});
 
 		const savedAdminUser = await newAdminUser.save();
