@@ -390,6 +390,15 @@ paymentController.manualServicePayment = async (req, res) => {
 		currentDate.setMonth(currentDate.getMonth() + 1);
 		const expireDate = currentDate.toISOString().split("T")[0];
 
+		let merchantTransactionId = `MANUAL_${Date.now()}`;
+		if (serviceData.type === "jobPostAddon" && serviceData.jobId) {
+			merchantTransactionId = `MANUAL_JOB_ADDON_${serviceData.jobId}`;
+
+			// Update the job to link this transaction ID
+			const Job = require("../models/job.model");
+			await Job.findByIdAndUpdate(serviceData.jobId, { merchantTransactionId });
+		}
+
 		const serviceRecord = await serviceModel.create({
 			userId: req.user._id,
 			date,
@@ -397,7 +406,7 @@ paymentController.manualServicePayment = async (req, res) => {
 			time,
 			totalAmount,
 			serviceData,
-			merchantTransactionId: `MANUAL_${Date.now()}`,
+			merchantTransactionId,
 			isPaymentSuccess: false,
 			isActive: false,
 			paymentScreenshot: screenshotUrl,
