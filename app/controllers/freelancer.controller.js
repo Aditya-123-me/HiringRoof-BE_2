@@ -90,10 +90,6 @@ freelancerController.approve = async (req, res) => {
 			return res.status(400).send({ status: false, msg: "Application is already approved." });
 		}
 
-		// Create the actual adminUser account for this freelancer
-		const salt = await bcrypt.genSalt(10);
-		const hashedPassword = await bcrypt.hash(password, salt);
-
 		// Generate unique userId like in adminUser.controller.js
 		const adminUserCount = await AdminUser.countDocuments();
 		const generatedUserId = `${application.name.split(" ")[0]}_${adminUserCount}`;
@@ -102,7 +98,7 @@ freelancerController.approve = async (req, res) => {
 			name: application.name,
 			email: application.email,
 			number: application.phone,
-			password: hashedPassword,
+			password: password, // adminUser schema uses plaintext passwords in this system
 			type: "hr", // They are registered as an HR admin
 			isActive: true,
 			userId: generatedUserId,
