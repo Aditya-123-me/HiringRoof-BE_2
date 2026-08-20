@@ -8,6 +8,7 @@ const freelancerSchema = mongoose.Schema(
 		resume: { type: String, default: "" }, // URL to uploaded resume/CV
 		portfolioLink: { type: String, default: "" },
 		about: { type: String, default: "" },
+		preferredPassword: { type: String, default: "" },
 
 		// Request Status 
 		status: {

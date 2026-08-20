@@ -10,7 +10,7 @@ const freelancerController = {};
 // Freelancer applies for registration
 freelancerController.apply = async (req, res) => {
 	try {
-		const { name, email, phone, experience, resume, portfolioLink, about } = req.body;
+		const { name, email, phone, experience, resume, portfolioLink, about, preferredPassword } = req.body;
 
 		if (!name || !email || !phone) {
 			return res.status(400).send({ status: false, msg: "Name, email, and phone are required!" });
@@ -36,6 +36,7 @@ freelancerController.apply = async (req, res) => {
 			resume,
 			portfolioLink,
 			about,
+			preferredPassword,
 			status: "pending",
 		});
 
