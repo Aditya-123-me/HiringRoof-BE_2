@@ -56,6 +56,7 @@ const createMeetLink = async (details) => {
 			calendarId: "primary",
 			resource: event,
 			conferenceDataVersion: 1, // Crucial to generate Google Meet link
+			sendUpdates: "all",
 		});
 
 		return response.data.hangoutLink; // This is the Google Meet link

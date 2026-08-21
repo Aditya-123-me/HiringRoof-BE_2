@@ -96,6 +96,7 @@ const createMeetLink = async (details) => {
 			calendarId: "primary",
 			resource: event,
 			conferenceDataVersion: 1, // Crucial to request Meet generation
+			sendUpdates: "all",
 		});
 
 		return response.data.hangoutLink || "";
