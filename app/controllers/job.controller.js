@@ -232,6 +232,7 @@ jobController.getJobs = async (req, res) => {
 		let filters = {};
 		filters.isActive = true;
 		filters.blocked_status = false;
+		filters.isDeleted = { $ne: true };
 		if (req.query.serviceType) filters.serviceType = req.query.serviceType;
 		if (req.query.jobType) filters.jobType = req.query.jobType;
 		if (req.query.workType) filters.workType = req.query.workType;
@@ -291,6 +292,7 @@ jobController.getJobsAuth = async (req, res) => {
 		let filters = {};
 		filters.isActive = true;
 		filters.blocked_status = false;
+		filters.isDeleted = { $ne: true };
 		if (req.query.serviceType) filters.serviceType = req.query.serviceType;
 		if (req.query.jobType) filters.jobType = req.query.jobType;
 		if (req.query.workType) filters.workType = req.query.workType;
@@ -434,6 +436,7 @@ jobController.search = async (req, res) => {
 		}
 
 		filterCondition.blocked_status = { $ne: true };
+		filterCondition.isDeleted = { $ne: true };
 
 		let data = await Job.find(filterCondition)
 			.limit(limit)
@@ -493,7 +496,7 @@ jobController.delete = async (req, res) => {
 		const findJob = await Job.findById({ _id });
 		if (!findJob) return res.status(404).send({ status: false, msg: "No job found, please check your id !!" });
 
-		const deleteOne = await Job.findByIdAndDelete({ _id }).populate("userId", { name: 1, email: 1, phone: 1 });
+		const deleteOne = await Job.findByIdAndUpdate({ _id }, { isDeleted: true }, { new: true }).populate("userId", { name: 1, email: 1, phone: 1 });
 
 		return res.status(200).send({ status: true, msg: "One job deleted !!", data: deleteOne });
 	} catch (error) {
@@ -510,7 +513,7 @@ jobController.myJobs = async (req, res) => {
 		const limit = req.query.limit >= 1 ? req.query.limit : 6;
 		const skip = limit * (page - 1);
 
-		const jobsData = await Job.find({ userId: req.user._id })
+		const jobsData = await Job.find({ userId: req.user._id, isDeleted: { $ne: true } })
 			.limit(limit)
 			.skip(skip)
 			.sort({ createdAt: -1 })
@@ -521,7 +524,7 @@ jobController.myJobs = async (req, res) => {
 				profileImage: 1,
 			})
 			.lean();
-		const jobCount = await Job.countDocuments({ userId: req.user._id });
+		const jobCount = await Job.countDocuments({ userId: req.user._id, isDeleted: { $ne: true } });
 
 		const jobs = [];
 

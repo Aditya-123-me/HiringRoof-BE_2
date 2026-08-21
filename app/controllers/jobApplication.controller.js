@@ -878,6 +878,15 @@ jobApplication.shortlist = async (req, res, io) => {
 		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
+		const job = await Job.findById(application.jobId);
+		if (job && job.isDeleted) {
+			return res.status(400).json({ 
+				status: false, 
+				isJobDeleted: true,
+				msg: "This job was deleted. You cannot change the application status." 
+			});
+		}
+
 		const userCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
 		if (!userCheck) return res.status(404).send({ status: false, msg: "The application doesn't belong to this user !!" });
 
@@ -919,6 +928,15 @@ jobApplication.notSelected = async (req, res, io) => {
 	try {
 		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
+
+		const job = await Job.findById(application.jobId);
+		if (job && job.isDeleted) {
+			return res.status(400).json({ 
+				status: false, 
+				isJobDeleted: true,
+				msg: "This job was deleted. You cannot change the application status." 
+			});
+		}
 
 		const userCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
 		if (!userCheck) return res.status(404).send({ status: false, msg: "The application doesn't belong to this user !!" });
@@ -973,6 +991,15 @@ jobApplication.doInterviewSelect = async (req, res, io) => {
 			.populate("applicantId")
 			.populate("applierId");
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
+
+		const job = await Job.findById(application.jobId);
+		if (job && job.isDeleted) {
+			return res.status(400).json({ 
+				status: false, 
+				isJobDeleted: true,
+				msg: "This job was deleted. You cannot change the application status." 
+			});
+		}
 
 		const meetLink = await createMeetLink({
 			candidateEmail: application.applicantId?.email,
@@ -1048,6 +1075,15 @@ jobApplication.doInterview2Select = async (req, res, io) => {
 			.populate("applierId");
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
 
+		const job = await Job.findById(application.jobId);
+		if (job && job.isDeleted) {
+			return res.status(400).json({ 
+				status: false, 
+				isJobDeleted: true,
+				msg: "This job was deleted. You cannot change the application status." 
+			});
+		}
+
 		const meetLink = await createMeetLink({
 			candidateEmail: application.applicantId?.email,
 			candidateName: application.applicantId?.name,
@@ -1114,6 +1150,15 @@ jobApplication.selected = async (req, res, io) => {
 
 		const application = await JobApplication.findOne({ _id: req.params._id || req.params.id });
 		if (!application) return res.status(404).send({ status: false, msg: "No application found !!" });
+
+		const job = await Job.findById(application.jobId);
+		if (job && job.isDeleted) {
+			return res.status(400).json({ 
+				status: false, 
+				isJobDeleted: true,
+				msg: "This job was deleted. You cannot change the application status." 
+			});
+		}
 
 		// const userCheck = await JobApplication.findOne({ _id: req.params, applierId: req.user._id });
 		// if (!userCheck) return res.status(404).send({ status: false, msg: "The application doesn't belong to this user !!" });
@@ -2080,6 +2125,14 @@ jobApplication.updatePipelineStatus = async (req, res) => {
 				status: false,
 				msg: `Invalid status. Must be one of: ${VALID_STATUSES.join(", ")}`,
 			});
+		}
+
+		const appDoc = await JobApplication.findById(applicationId).populate("jobId");
+		if (!appDoc) {
+			return res.status(404).json({ status: false, msg: "Application not found" });
+		}
+		if (appDoc.jobId && appDoc.jobId.isDeleted && req.user && req.user.type === "hr") {
+			return res.status(400).json({ status: false, msg: "This job was deleted. You cannot change the application status.", isJobDeleted: true });
 		}
 
 		// Prepare update object to keep all boolean fields in sync with the selected stage

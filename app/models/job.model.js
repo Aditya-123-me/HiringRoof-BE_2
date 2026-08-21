@@ -47,6 +47,7 @@ const jobSchema = mongoose.Schema(
 		isPaymentSuccess: { type: Boolean, default: false },
 		merchantTransactionId: { type: String, default: "" },
 		expireDate: { type: String, default: "" },
+		isDeleted: { type: Boolean, default: false },
 	},
 	{ timestamps: true }
 );
