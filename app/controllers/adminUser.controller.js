@@ -407,7 +407,7 @@ adminUser.getJobApplicationsHRdetails = async (req, res) => {
 
 	try {
 		// Fetch job details
-		const job = await jobModel.findById(jobId);
+		const job = await jobModel.findById(jobId).populate("userId", "name email phone profileImage");
 		if (!job) return res.status(404).json({ status: false, message: "Job not found" });
 
 		// Calculate skip and limit for pagination
