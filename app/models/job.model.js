@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-
+ 
 const jobSchema = mongoose.Schema(
 	{
 		userId: { type: mongoose.Schema.Types.ObjectId, ref: "users", required: true },

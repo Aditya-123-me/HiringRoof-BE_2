@@ -48,9 +48,9 @@ jobController.post = async (req, res, io) => {
 		if (req.body.vacancies) bodyData.vacancies = req.body.vacancies;
 		if (req.body.companyName) {
 			let shortName = "";
-			const cn = req.body.companyName.split(" ");
-			if (cn.length > 1) cn.map((data) => (shortName += data[0].toUpperCase()));
-			else shortName = cn[0].slice(0, 3).toUpperCase();
+			const cn = req.body.companyName.split(" ").filter(Boolean);
+			if (cn.length > 1) cn.map((data) => { if (data) shortName += data[0].toUpperCase() });
+			else if (cn.length === 1) shortName = cn[0].slice(0, 3).toUpperCase();
 			bodyData.companyShortName = shortName;
 		}
 		if (req.body.addOn) bodyData.addOn = JSON.parse(req.body.addOn);
@@ -881,7 +881,7 @@ jobController.createWithAddon = async (req, res, io) => {
 		const screenshotUrl = await imageUpload(screenshotFile, `${req.user._id}_job_addon_proof_${Date.now()}`, "paymentProof");
 		if (!screenshotUrl) return res.status(500).json({ status: false, msg: "Failed to upload payment screenshot!" });
 
-		const bodyData = {};
+		const bodyData = {}; 
 		bodyData.userId = req.user._id;
 		bodyData.jobTittle = parsedJobData.jobTittle;
 		bodyData.jobType = parsedJobData.jobType;
@@ -903,9 +903,9 @@ jobController.createWithAddon = async (req, res, io) => {
 
 		if (bodyData.companyName) {
 			let shortName = "";
-			const cn = bodyData.companyName.split(" ");
-			if (cn.length > 1) cn.map((data) => (shortName += data[0].toUpperCase()));
-			else shortName = cn[0].slice(0, 3).toUpperCase();
+			const cn = bodyData.companyName.split(" ").filter(Boolean);
+			if (cn.length > 1) cn.map((data) => { if (data) shortName += data[0].toUpperCase() });
+			else if (cn.length === 1) shortName = cn[0].slice(0, 3).toUpperCase();
 			bodyData.companyShortName = shortName;
 		}
 
