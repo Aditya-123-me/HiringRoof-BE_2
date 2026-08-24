@@ -256,9 +256,190 @@ userController.user = async (req, res) => {
 				msg: "User does't exits !!",
 			});
 
+		let formattedRecord = userRecord.toObject ? userRecord.toObject() : userRecord;
+		if (req.user && req.user.type === "hr" && formattedRecord.userType === "jobSeeker") {
+			const isUploadedByThisHR = formattedRecord.uploadedBy && formattedRecord.uploadedBy.toString() === req.user._id.toString();
+			if (!isUploadedByThisHR) {
+				formattedRecord = {
+					...formattedRecord,
+					phone: "Hidden (Self-Enrolled)",
+					alternativePhone: "Hidden (Self-Enrolled)",
+					alternativePhone2: "Hidden (Self-Enrolled)",
+					email: "Hidden (Self-Enrolled)",
+					address: "Hidden (Self-Enrolled)",
+					resume: "",
+					resumeFileName: "",
+					withoutContactResume: "",
+					letter: "",
+					letterFileName: "",
+					currentPay: "Hidden",
+					expectationPay: "Hidden",
+					dob: "Hidden",
+					gender: "Hidden"
+				};
+			}
+		}
+
+		let extraData = null;
+		// Add extra detailed analytics for Super Admin (req.user.type === "admin" or "sub-admin")
+		if (req.user && (req.user.type === "admin" || req.user.type === "sub-admin")) {
+			if (formattedRecord.userType === "jobSeeker") {
+				const JobApplication = require("../models/jobApplication.model");
+				// Fetch all job applications for this candidate
+				const applications = await JobApplication.find({ applicantId: formattedRecord._id })
+					.populate("jobId")
+					.lean();
+				
+				const appliedJobsHistory = applications.map(app => ({
+					jobId: app.jobId?._id,
+					jobTitle: app.jobId?.jobTittle,
+					companyName: app.jobId?.companyName,
+					pipelineStatus: app.pipelineStatus || "Applied",
+					appliedDate: app.createdAt,
+					interviewStatus: app.interviewStatus,
+					interviewsDate: app.interviewsDate,
+					interviewsTime: app.interviewsTime,
+					interviews2Date: app.interviews2Date,
+					interviews2Time: app.interviews2Time,
+					offerLetterDate: app.offerLetterDate,
+					offerLetterTime: app.offerLetterTime
+				}));
+
+				// Calculate candidate-level application summary stats
+				const totalApplied = applications.length;
+				const totalShortlisted = applications.filter(app => app.shortlist).length;
+				const totalSelected = applications.filter(app => app.pipelineStatus === "Selected").length;
+				const totalRejected = applications.filter(app => app.pipelineStatus === "Rejected").length;
+
+				// Fetch purchased addons/services
+				const Service = require("../models/service.model");
+				const purchasedServices = await Service.find({
+					userId: formattedRecord._id,
+					paymentStatus: "APPROVED"
+				}).populate("addonId").lean();
+
+				const totalSpent = purchasedServices.reduce((sum, s) => sum + s.totalAmount, 0);
+				const purchaseHistory = purchasedServices.map(s => ({
+					serviceId: s._id,
+					addonId: s.addonId?._id,
+					title: s.addonId?.title || s.serviceData?.title || "Addon Service",
+					amount: s.totalAmount,
+					purchaseDate: s.date,
+					expireDate: s.expireDate,
+					isActive: s.isActive,
+					rating: s.rating,
+					reviewText: s.reviewText
+				}));
+
+				extraData = {
+					appliedJobsHistory,
+					analytics: {
+						totalApplied,
+						totalShortlisted,
+						totalSelected,
+						totalRejected
+					},
+					purchasedAddons: {
+						totalSpent,
+						totalPurchasedCount: purchasedServices.length,
+						purchaseHistory
+					}
+				};
+			} else if (["individualRecruiter", "companyRecruiter", "recruiter", "company"].includes(formattedRecord.userType)) {
+				const Job = require("../models/job.model");
+				const JobApplication = require("../models/jobApplication.model");
+
+				// Fetch all jobs posted by this recruiter
+				const jobs = await Job.find({ userId: formattedRecord._id }).lean();
+
+				const jobsData = [];
+				let grandTotalApplicants = 0;
+				let grandTotalSelected = 0;
+				let grandTotalRejected = 0;
+
+				for (const job of jobs) {
+					// Count applicants for this job
+					const applicantsCount = await JobApplication.countDocuments({ jobId: job._id });
+					grandTotalApplicants += applicantsCount;
+
+					// Aggregate status counts for this job
+					const statusAggregation = await JobApplication.aggregate([
+						{ $match: { jobId: job._id } },
+						{ $group: { _id: "$pipelineStatus", count: { $sum: 1 } } }
+					]);
+
+					const statusBreakdown = {
+						Applied: 0,
+						Shortlisted: 0,
+						"Interview 1": 0,
+						"Interview 2": 0,
+						Selected: 0,
+						Rejected: 0
+					};
+
+					statusAggregation.forEach(group => {
+						const statusName = group._id || "Applied";
+						if (statusBreakdown[statusName] !== undefined) {
+							statusBreakdown[statusName] = group.count;
+						}
+					});
+
+					grandTotalSelected += statusBreakdown.Selected;
+					grandTotalRejected += statusBreakdown.Rejected;
+
+					jobsData.push({
+						jobId: job._id,
+						jobTitle: job.jobTittle,
+						companyName: job.companyName,
+						location: job.location,
+						isActive: job.isActive,
+						createdAt: job.createdAt,
+						applicantsCount,
+						statusBreakdown
+					});
+				}
+
+				// Fetch purchased addons/services for recruiter
+				const Service = require("../models/service.model");
+				const purchasedServices = await Service.find({
+					userId: formattedRecord._id,
+					paymentStatus: "APPROVED"
+				}).populate("addonId").lean();
+
+				const totalSpent = purchasedServices.reduce((sum, s) => sum + s.totalAmount, 0);
+				const purchaseHistory = purchasedServices.map(s => ({
+					serviceId: s._id,
+					addonId: s.addonId?._id,
+					title: s.addonId?.title || s.serviceData?.title || "Addon Service",
+					amount: s.totalAmount,
+					purchaseDate: s.date,
+					expireDate: s.expireDate,
+					isActive: s.isActive,
+					rating: s.rating,
+					reviewText: s.reviewText
+				}));
+
+				extraData = {
+					postedJobs: jobsData,
+					analytics: {
+						totalJobsPosted: jobs.length,
+						totalApplicantsCount: grandTotalApplicants,
+						totalSelectedCount: grandTotalSelected,
+						totalRejectedCount: grandTotalRejected
+					},
+					purchasedAddons: {
+						totalSpent,
+						totalPurchasedCount: purchasedServices.length,
+						purchaseHistory
+					}
+				};
+			}
+		}
+
 		return res.status(200).send({
 			status: true,
-			userRecord,
+			userRecord: formattedRecord,
+			extraData,
 			msg: "User fetch successfully !!",
 		});
 	} catch (error) {
@@ -281,8 +462,57 @@ userController.users = async (req, res) => {
 		const filter = {};
 		if (req.query.type) filter.userType = req.query.type;
 
-		const users = await User.find(filter, null, options);
+		if (req.user && req.user.type === "hr") {
+			const JobApplication = require("../models/jobApplication.model");
+			const assignedJobIds = req.user?.jobTarget?.reduce((acc, target) => {
+				if (target.jobIds) {
+					target.jobIds?.forEach((j) => {
+						if (j.jobId) acc.push(j.jobId);
+					});
+				}
+				return acc;
+			}, []) || [];
+
+			const jobApps = await JobApplication.find({ jobId: { $in: assignedJobIds } }).select("applicantId");
+			const candidateIdsFromJobs = jobApps.map((app) => app.applicantId);
+
+			filter.userType = "jobSeeker";
+			filter.$or = [
+				{ uploadedBy: req.user._id },
+				{ _id: { $in: candidateIdsFromJobs } }
+			];
+		}
+
+		let users = await User.find(filter, null, options).lean();
 		const totalUser = await User.countDocuments(filter);
+
+		if (req.user && req.user.type === "hr") {
+			users = users.map(user => {
+				if (user.userType === "jobSeeker") {
+					const isUploadedByThisHR = user.uploadedBy && user.uploadedBy.toString() === req.user._id.toString();
+					if (!isUploadedByThisHR) {
+						return {
+							...user,
+							phone: "Hidden (Self-Enrolled)",
+							alternativePhone: "Hidden (Self-Enrolled)",
+							alternativePhone2: "Hidden (Self-Enrolled)",
+							email: "Hidden (Self-Enrolled)",
+							address: "Hidden (Self-Enrolled)",
+							resume: "",
+							resumeFileName: "",
+							withoutContactResume: "",
+							letter: "",
+							letterFileName: "",
+							currentPay: "Hidden",
+							expectationPay: "Hidden",
+							dob: "Hidden",
+							gender: "Hidden"
+						};
+					}
+				}
+				return user;
+			});
+		}
 
 		return res.status(200).json({
 			status: true,
@@ -310,24 +540,68 @@ userController.jobSeeker = async (req, res) => {
 		};
 
 		const filters = { userType: "jobSeeker" };
-		if(req.user && req.user.type !=="superAdmin" || req.user && req.user.type !=="superadmin"){
-			const jobApplications = require("../models/jobApplication.model");
-			const assignedJobs = req.user?.jobTarget?.reduce((acc,target)=>{
-				if(target.jobIds){
-					target.jobIds?.forEach(j=>{
-						if(j.jobId) acc.push(j.jobId);
-					})
+		if (req.user && req.user.type === "hr") {
+			const JobApplication = require("../models/jobApplication.model");
+			const assignedJobIds = req.user?.jobTarget?.reduce((acc, target) => {
+				if (target.jobIds) {
+					target.jobIds?.forEach((j) => {
+						if (j.jobId) acc.push(j.jobId);
+					});
 				}
 				return acc;
-			},[]);
+			}, []) || [];
+
 			const jobApps = await JobApplication.find({ jobId: { $in: assignedJobIds } }).select("applicantId");
-			const candidateIds = jobApps.map(app => app.applicantId);
+			const candidateIdsFromJobs = jobApps.map((app) => app.applicantId);
+
+			filters.$or = [
+				{ uploadedBy: req.user._id },
+				{ _id: { $in: candidateIdsFromJobs } }
+			];
+		} else if (req.user && req.user.type !== "superAdmin" && req.user.type !== "superadmin" && req.user.type !== "admin" && req.user.type !== "sub-admin") {
+			const JobApplication = require("../models/jobApplication.model");
+			const assignedJobs = req.user?.jobTarget?.reduce((acc, target) => {
+				if (target.jobIds) {
+					target.jobIds?.forEach((j) => {
+						if (j.jobId) acc.push(j.jobId);
+					});
+				}
+				return acc;
+			}, []) || [];
+			const jobApps = await JobApplication.find({ jobId: { $in: assignedJobs } }).select("applicantId");
+			const candidateIds = jobApps.map((app) => app.applicantId);
 			filters._id = { $in: candidateIds };
 		}
 
 
-		const users = await User.find(filters, null, options);
+		let users = await User.find(filters, null, options).lean();
 		const totalUser = await User.countDocuments(filters);
+
+		if (req.user && req.user.type === "hr") {
+			users = users.map(user => {
+				const isUploadedByThisHR = user.uploadedBy && user.uploadedBy.toString() === req.user._id.toString();
+				if (!isUploadedByThisHR) {
+					return {
+						...user,
+						phone: "Hidden (Self-Enrolled)",
+						alternativePhone: "Hidden (Self-Enrolled)",
+						alternativePhone2: "Hidden (Self-Enrolled)",
+						email: "Hidden (Self-Enrolled)",
+						address: "Hidden (Self-Enrolled)",
+						resume: "",
+						resumeFileName: "",
+						withoutContactResume: "",
+						letter: "",
+						letterFileName: "",
+						currentPay: "Hidden",
+						expectationPay: "Hidden",
+						dob: "Hidden",
+						gender: "Hidden"
+					};
+				}
+				return user;
+			});
+		}
 
 		return res.status(200).json({
 			status: true,

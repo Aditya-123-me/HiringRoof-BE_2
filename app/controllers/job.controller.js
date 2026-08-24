@@ -709,6 +709,7 @@ jobController.bulkUpload = async (req, res) => {
 
 			obj.userType = "jobSeeker";
 			obj.registrationSource = "bulk";
+			obj.uploadedBy = posterId;
 			obj.profileComplete = calculateProfileComplete(obj);
 			return obj;
 		});
@@ -796,6 +797,7 @@ jobController.singleUpload = async (req, res) => {
 			if (userData.education) userData.education = normalizeEducation(userData.education);
 			userData.userType = "jobSeeker";
 			userData.registrationSource = "single";
+			userData.uploadedBy = posterId;
 			userData.profileComplete = calculateProfileComplete(userData);
 		}
 

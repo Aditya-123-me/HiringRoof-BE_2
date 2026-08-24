@@ -109,8 +109,50 @@ adminUser.getOne = async (req, res) => {
 	try {
 		const id = req.params.id;
 		const adminUser = await adminUserModel.findOne({ _id: id });
+		if (!adminUser) return res.status(404).json({ status: false, msg: "Admin user not found" });
 
-		return res.status(200).send({ status: true, msg: "User Fetch Successfully !!", data: adminUser });
+		let extraInfo = null;
+		if (adminUser.type === "hr") {
+			const User = require("../models/user.model");
+			const Service = require("../models/service.model");
+
+			// 1. Calculate how many unique jobs this HR is managing
+			const uniqueJobIds = new Set();
+			if (adminUser.jobTarget) {
+				adminUser.jobTarget.forEach(target => {
+					if (target.jobIds) {
+						target.jobIds.forEach(j => {
+							if (j.jobId) uniqueJobIds.add(j.jobId.toString());
+						});
+					}
+				});
+			}
+			const totalJobsManaging = uniqueJobIds.size;
+
+			// 2. Count candidates uploaded by this HR Admin
+			const totalUploadedCandidates = await User.countDocuments({ uploadedBy: adminUser._id });
+
+			// 3. Count active addons linked to the managed jobs
+			const jobAddonTxnIds = Array.from(uniqueJobIds).map(jobId => `MANUAL_JOB_ADDON_${jobId}`);
+			const totalAddonsManaged = await Service.countDocuments({
+				merchantTransactionId: { $in: jobAddonTxnIds },
+				paymentStatus: "APPROVED",
+				isActive: true
+			});
+
+			extraInfo = {
+				totalJobsManaging,
+				totalUploadedCandidates,
+				totalAddonsManaged
+			};
+		}
+
+		const responseData = adminUser.toObject ? adminUser.toObject() : adminUser;
+		if (extraInfo) {
+			responseData.extraInfo = extraInfo;
+		}
+
+		return res.status(200).send({ status: true, msg: "User Fetch Successfully !!", data: responseData });
 	} catch (error) {
 		console.log(error);
 		res.status(500).send({ status: false, msg: error.message });
@@ -451,8 +493,34 @@ adminUser.getJobApplicationsHRdetails = async (req, res) => {
 		});
 
 		// Fetch user details for candidates
-		const userDocs = await User.find({ _id: { $in: candidateIds } }).lean();
+		let userDocs = await User.find({ _id: { $in: candidateIds } }).lean();
 		const totalCandidatesApplied = await JobApplication.countDocuments({ jobId });
+
+		if (req.user && req.user.type === "hr") {
+			userDocs = userDocs.map(user => {
+				const isUploadedByThisHR = user.uploadedBy && user.uploadedBy.toString() === req.user._id.toString();
+				if (!isUploadedByThisHR) {
+					return {
+						...user,
+						phone: "Hidden (Self-Enrolled)",
+						alternativePhone: "Hidden (Self-Enrolled)",
+						alternativePhone2: "Hidden (Self-Enrolled)",
+						email: "Hidden (Self-Enrolled)",
+						address: "Hidden (Self-Enrolled)",
+						resume: "",
+						resumeFileName: "",
+						withoutContactResume: "",
+						letter: "",
+						letterFileName: "",
+						currentPay: "Hidden",
+						expectationPay: "Hidden",
+						dob: "Hidden",
+						gender: "Hidden"
+					};
+				}
+				return user;
+			});
+		}
 
 		// Merge per-job pipelineStatus + jobApplicationId into each user object
 		const candidates = userDocs.map((user) => {

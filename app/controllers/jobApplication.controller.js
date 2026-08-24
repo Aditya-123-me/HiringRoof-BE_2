@@ -2261,13 +2261,31 @@ jobApplication.updatePipelineStatus = async (req, res) => {
 			return res.status(404).json({ status: false, msg: "Job application not found" });
 		}
 
-		// Sync User-level global selectedBadge and selectedIn history
+		// Sync User-level global selectedBadge, selectedIn history, and statusAnalytics
 		try {
+			const previousStatus = appDoc.pipelineStatus || "Applied";
+			const newStatus = status;
+
+			const userUpdateObj = {};
+			userUpdateObj[`statusAnalytics.${newStatus}`] = 1;
+
+			if (newStatus === "Rejected") {
+				if (previousStatus === "Applied") {
+					userUpdateObj["statusAnalytics.dropOffFromApplied"] = 1;
+				} else if (previousStatus === "Shortlisted") {
+					userUpdateObj["statusAnalytics.dropOffFromShortlisted"] = 1;
+				} else if (previousStatus === "Interview 1") {
+					userUpdateObj["statusAnalytics.dropOffFromInterview1"] = 1;
+				} else if (previousStatus === "Interview 2") {
+					userUpdateObj["statusAnalytics.dropOffFromInterview2"] = 1;
+				}
+			}
+
 			if (status === "Selected") {
 				// Mark as selected globally, add to selectedIn history (using $addToSet or push unique)
 				await User.findByIdAndUpdate(application.applicantId, {
 					$set: { selectedBadge: true },
-					$inc: { selectionCount: 1 },
+					$inc: { selectionCount: 1, ...userUpdateObj },
 					$addToSet: { selectedIn: { job: application.jobId } }
 				});
 			} else {
@@ -2277,20 +2295,25 @@ jobApplication.updatePipelineStatus = async (req, res) => {
 					applicantId: application.applicantId,
 					pipelineStatus: "Selected"
 				});
+				
+				const incFields = { ...userUpdateObj };
+				
 				if (otherSelectedCount === 0) {
 					await User.findByIdAndUpdate(application.applicantId, {
 						$set: { selectedBadge: false },
+						$inc: incFields,
 						$pull: { selectedIn: { job: application.jobId } }
 					});
 				} else {
 					// If they are still selected in another job, just remove this specific job from active list
 					await User.findByIdAndUpdate(application.applicantId, {
+						$inc: incFields,
 						$pull: { selectedIn: { job: application.jobId } }
 					});
 				}
 			}
 		} catch (dbErr) {
-			console.error("Failed to sync user-level selection flags:", dbErr);
+			console.error("Failed to sync user-level selection flags and status analytics:", dbErr);
 		}
 
 		return res.status(200).json({

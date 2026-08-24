@@ -1,5 +1,7 @@
 const mongoose = require("mongoose");
 
+
+
 const userSchema = mongoose.Schema(
 	{
 		phone: { type: String, unique: true },
@@ -117,7 +119,20 @@ const userSchema = mongoose.Schema(
 		badgeRemovedCount: {
 			type: Number,
 			default: 0
-		}
+		},
+		statusAnalytics: {
+			Applied: { type: Number, default: 0 },
+			Shortlisted: { type: Number, default: 0 },
+			"Interview 1": { type: Number, default: 0 },
+			"Interview 2": { type: Number, default: 0 },
+			Selected: { type: Number, default: 0 },
+			Rejected: { type: Number, default: 0 },
+			dropOffFromApplied: { type: Number, default: 0 },
+			dropOffFromShortlisted: { type: Number, default: 0 },
+			dropOffFromInterview1: { type: Number, default: 0 },
+			dropOffFromInterview2: { type: Number, default: 0 }
+		},
+		uploadedBy: { type: mongoose.Schema.Types.ObjectId, ref: "adminUser", default: null },
 	},
 	{ timestamps: true }
 );
