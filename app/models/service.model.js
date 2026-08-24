@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const serviceSchema = mongoose.Schema(
 	{
 		userId: { type: mongoose.Schema.Types.ObjectId, ref: "users" },
+		addonId: { type: mongoose.Schema.Types.ObjectId, ref: "addon", default: null },
 		date: { type: String, required: true },
 		expireDate: { type: String, required: true },
 		time: { type: String, required: true },

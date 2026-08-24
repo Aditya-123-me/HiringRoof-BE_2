@@ -401,6 +401,7 @@ paymentController.manualServicePayment = async (req, res) => {
 
 		const serviceRecord = await serviceModel.create({
 			userId: req.user._id,
+			addonId: req.body.addonId || null,
 			date,
 			expireDate,
 			time,

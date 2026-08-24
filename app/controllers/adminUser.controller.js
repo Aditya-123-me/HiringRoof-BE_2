@@ -446,6 +446,7 @@ adminUser.getJobApplicationsHRdetails = async (req, res) => {
 				uploadBatch: application.uploadBatch,
 				uploadSource: application.uploadSource,
 				source: application.source,
+				applicationDetails: application.toObject ? application.toObject() : application,
 			};
 		});
 
@@ -464,6 +465,7 @@ adminUser.getJobApplicationsHRdetails = async (req, res) => {
 				uploadBatch: appData.uploadBatch ?? user.uploadBatch,
 				uploadSource: appData.uploadSource ?? user.uploadSource,
 				source: appData.source ?? user.source,
+				applicationDetails: appData.applicationDetails,
 			};
 		});
 
