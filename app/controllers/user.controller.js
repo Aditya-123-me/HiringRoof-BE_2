@@ -281,8 +281,8 @@ userController.user = async (req, res) => {
 		}
 
 		let extraData = null;
-		// Add extra detailed analytics for Super Admin (req.user.type === "admin" or "sub-admin")
-		if (req.user && (req.user.type === "admin" || req.user.type === "sub-admin")) {
+		// Add extra detailed analytics for Super Admin (req.user.type === "admin", "superAdmin", "superadmin", or "sub-admin")
+		if (req.user && ["admin", "superAdmin", "superadmin", "sub-admin"].includes(req.user.type)) {
 			if (formattedRecord.userType === "jobSeeker") {
 				const JobApplication = require("../models/jobApplication.model");
 				// Fetch all job applications for this candidate
