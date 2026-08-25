@@ -6,7 +6,7 @@ const addonSchema = mongoose.Schema(
 		amount: { type: Number, required: true },
 		desc: { type: String, default: "" },
 		points: { type: [String], default: [] },
-		type: { type: String, enum: ["general", "jobPostAddon"], default: "general" },
+		type: { type: String, enum: ["general", "jobPostAddon", "recruiterService", "candidateService"], default: "general" },
 		createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "adminUser", required: true },
 		isActive: { type: Boolean, default: true }
 	},

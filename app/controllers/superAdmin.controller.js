@@ -88,72 +88,121 @@ function isValidMonthFormat(month) {
 
 superAdmin.getInterviewsHistory = async (req, res) => {
 	try {
-		const { hrId, interviewField, month, InterviewDone, RescheduledInterview } = req.query;
+		const { hrId, interviewField, month, InterviewDone, RescheduledInterview, status } = req.query;
 
-		let hrFilter = { $or: [{ type: "hr" }, { type: "admin" }] }; // Filter object for HR query
+		let jobApplications;
 		if (hrId && ObjectId.isValid(hrId)) {
-			hrFilter._id = hrId;
-		}
-
-		// Fetch HR(s) based on provided hrId or fetch all HRs if hrId is not provided
-		const hrs = await adminUserModel.find(hrFilter);
-
-		const currentDate = new Date(); // Get the current date/time
-
-		const interviewsPassedDate = [];
-
-		// Iterate through each HR or just use the single HR if hrId is provided
-		for (const hr of hrs) {
+			const hr = await adminUserModel.findById(hrId);
+			if (!hr) {
+				return res.status(404).json({ status: false, msg: "HR not found!" });
+			}
 			const jobIds = hr.jobTarget.flatMap((target) => target.jobIds.map((idObj) => idObj.jobId));
-
-			const jobApplications = await JobApplication.find({
+			jobApplications = await JobApplication.find({
 				jobId: { $in: jobIds },
 			}).populate("applicantId applierId jobId");
-
-			// Filter for passed interview dates with the specified month
-			const passedInterviews = jobApplications.filter((application) => {
-				let interviewPending;
-				if (interviewField === "interviews2") {
-					interviewPending = application.interviewStatus && application.interviewStatus["interview2Pending"] === true;
-				} else {
-					interviewPending = application.interviewStatus && application.interviewStatus["interviewPending"] === true;
-				}
-
-				// Check if interview is done within the specified month
-				const interviewDoneInMonth =
-					(application.interviewStatus.timestamp1 &&
-						new Date(application.interviewStatus.timestamp1).getMonth() === parseInt(month) - 1) ||
-					(application.interviewStatus.timestamp2 &&
-						new Date(application.interviewStatus.timestamp2).getMonth() === parseInt(month) - 1);
-
-				// Check if there are rescheduled interviews
-				const hasRescheduledInterviews = application.rescheduledInterviews.length > 0;
-
-				return (
-					interviewPending &&
-					new Date(application[`${interviewField}Date`]) < currentDate &&
-					new Date(application[`${interviewField}Date`]).getMonth() === parseInt(month) - 1 &&
-					(InterviewDone === "true" ? interviewDoneInMonth : true) &&
-					(RescheduledInterview === "true" ? hasRescheduledInterviews : true)
-				);
-			});
-
-			// Add HR details to each application/job
-			const hrDetails = passedInterviews.map((application) => ({
-				...application.toObject(),
-				hr_detail: hr, // Add HR details to each application/job
-			}));
-
-			interviewsPassedDate.push(...hrDetails);
+		} else {
+			// Fetch all job applications across all jobs in the system
+			jobApplications = await JobApplication.find().populate("applicantId applierId jobId");
 		}
+
+		const hrs = await adminUserModel.find({ $or: [{ type: "hr" }, { type: "admin" }] });
+		const jobToHrMap = {};
+		hrs.forEach(hr => {
+			if (hr.jobTarget) {
+				hr.jobTarget.forEach(target => {
+					if (target.jobIds) {
+						target.jobIds.forEach(idObj => {
+							if (idObj.jobId) {
+								jobToHrMap[idObj.jobId.toString()] = hr;
+							}
+						});
+					}
+				});
+			}
+		});
+
+		const currentDate = new Date(); // Get the current date/time
+		currentDate.setHours(0, 0, 0, 0);
+
+		// Filter for interview dates
+		const passedInterviews = jobApplications.filter((application) => {
+			const dateStr = application[`${interviewField}Date`];
+			if (!dateStr) return false;
+
+			const interviewDate = new Date(dateStr);
+			if (isNaN(interviewDate.getTime())) return false;
+
+			// Verify month if provided
+			if (month && month !== "all" && month !== "") {
+				if ((interviewDate.getMonth() + 1) !== parseInt(month)) {
+					return false;
+				}
+			}
+
+			// Check interviewPending states
+			let isPendingInRound = false;
+			if (interviewField === "interviews2") {
+				isPendingInRound = application.interviewStatus && application.interviewStatus["interview2Pending"] === true;
+			} else {
+				isPendingInRound = application.interviewStatus && application.interviewStatus["interviewPending"] === true;
+			}
+
+			// Check if evaluated
+			let isEvaluated = false;
+			if (interviewField === "interviews2") {
+				isEvaluated = application.interviewStatus && application.interviewStatus["interview2Pending"] === false;
+			} else {
+				isEvaluated = application.interviewStatus && application.interviewStatus["interviewPending"] === false;
+			}
+
+			const isRescheduled = application.rescheduledInterviews && application.rescheduledInterviews.length > 0;
+			const isUpcoming = interviewDate >= currentDate && !isEvaluated;
+			const isOverduePending = interviewDate < currentDate && isPendingInRound;
+
+			// Apply status filter
+			if (status === "upcoming") {
+				return isUpcoming;
+			} else if (status === "done") {
+				return isEvaluated;
+			} else if (status === "pending") {
+				return isOverduePending;
+			} else if (status === "rescheduled") {
+				return isRescheduled;
+			} else if (status === "all") {
+				return true;
+			}
+
+			// Fallback to legacy checks if no status is specified
+			const interviewDoneInMonth =
+				(application.interviewStatus.timestamp1 &&
+					new Date(application.interviewStatus.timestamp1).getMonth() === parseInt(month) - 1) ||
+				(application.interviewStatus.timestamp2 &&
+					new Date(application.interviewStatus.timestamp2).getMonth() === parseInt(month) - 1);
+
+			return (
+				isPendingInRound &&
+				interviewDate < new Date() &&
+				(InterviewDone === "true" ? interviewDoneInMonth : true) &&
+				(RescheduledInterview === "true" ? isRescheduled : true)
+			);
+		});
+
+		// Add HR details to each application/job
+		const hrDetails = passedInterviews.map((application) => {
+			const jobIdStr = application.jobId ? application.jobId._id.toString() : "";
+			return {
+				...application.toObject(),
+				hr_detail: jobToHrMap[jobIdStr] || null,
+			};
+		});
 
 		return res.status(200).send({
 			status: true,
-			msg: "Here are the listed employees with interviews passed date !!",
-			data: interviewsPassedDate,
+			msg: "Interviews history list fetched successfully!",
+			data: hrDetails,
 		});
 	} catch (error) {
-		console.error(error);
+		console.error("Error in superAdmin.getInterviewsHistory:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };
