@@ -450,6 +450,10 @@ userController.user = async (req, res) => {
 
 userController.users = async (req, res) => {
 	try {
+		res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+		res.setHeader("Pragma", "no-cache");
+		res.setHeader("Expires", "0");
+
 		const page = req.query.page >= 1 ? req.query.page : 1;
 		const limit = req.query.limit >= 1 ? req.query.limit : 25;
 
