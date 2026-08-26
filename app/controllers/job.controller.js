@@ -976,6 +976,7 @@ jobController.createWithAddon = async (req, res, io) => {
 		// Create pending service/payment record linked to the job
 		const serviceRecord = await serviceModel.create({
 			userId: req.user._id,
+			addonId: bodyData.addOn._id || bodyData.addOn.id || null,
 			date,
 			expireDate,
 			time: new Date().toLocaleTimeString("en-US", { hour12: false }),

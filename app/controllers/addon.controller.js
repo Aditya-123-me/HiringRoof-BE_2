@@ -220,9 +220,30 @@ addonController.analytics = async (req, res) => {
 addonController.purchases = async (req, res) => {
 	try {
 		const { id } = req.params;
-		const purchases = await serviceModel.find({ addonId: id })
-			.populate("userId", "name email phone profileImage")
-			.sort({ createdAt: -1 });
+		const addon = await addonModel.findById(id);
+		if (!addon) {
+			return res.status(404).json({ status: false, msg: "Addon not found" });
+		}
+
+		// Find purchases that match either by addonId, or legacy purchases matching by title/name
+		const purchases = await serviceModel.find({
+			$or: [
+				{ addonId: id },
+				{
+					$and: [
+						{ $or: [{ addonId: null }, { addonId: { $exists: false } }] },
+						{
+							$or: [
+								{ "serviceData.title": addon.title },
+								{ "serviceData.name": addon.title }
+							]
+						}
+					]
+				}
+			]
+		})
+		.populate("userId", "name email phone profileImage")
+		.sort({ createdAt: -1 });
 
 		return res.status(200).json({
 			status: true,

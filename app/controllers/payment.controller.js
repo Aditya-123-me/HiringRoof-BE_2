@@ -377,7 +377,7 @@ paymentController.manualServicePayment = async (req, res) => {
 
 		if (!date) return res.status(400).json({ status: false, msg: "Please select a date!" });
 		if (!time) return res.status(400).json({ status: false, msg: "Please select a time!" });
-		if (!serviceData || !serviceData.name) return res.status(400).json({ status: false, msg: "Service details are required!" });
+		if (!serviceData || (!serviceData.name && !serviceData.title)) return res.status(400).json({ status: false, msg: "Service details are required!" });
 		if (!req.file) return res.status(400).json({ status: false, msg: "Please upload payment screenshot proof!" });
 
 		const screenshotUrl = await imageUpload(req.file, `${req.user._id}_payment_proof_${Date.now()}`, "paymentProof");
@@ -401,7 +401,7 @@ paymentController.manualServicePayment = async (req, res) => {
 
 		const serviceRecord = await serviceModel.create({
 			userId: req.user._id,
-			addonId: req.body.addonId || null,
+			addonId: req.body.addonId || serviceData._id || serviceData.id || null,
 			date,
 			expireDate,
 			time,
