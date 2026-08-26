@@ -463,7 +463,6 @@ userController.users = async (req, res) => {
 		if (req.query.type) filter.userType = req.query.type;
 
 		if (req.user && req.user.type === "hr") {
-			const JobApplication = require("../models/jobApplication.model");
 			const assignedJobIds = req.user?.jobTarget?.reduce((acc, target) => {
 				if (target.jobIds) {
 					target.jobIds?.forEach((j) => {
@@ -473,14 +472,24 @@ userController.users = async (req, res) => {
 				return acc;
 			}, []) || [];
 
-			const jobApps = await JobApplication.find({ jobId: { $in: assignedJobIds } }).select("applicantId");
-			const candidateIdsFromJobs = jobApps.map((app) => app.applicantId);
+			if (req.query.type === "companyRecruiter" || req.query.type === "individualRecruiter") {
+				const Job = require("../models/job.model");
+				const jobs = await Job.find({ _id: { $in: assignedJobIds } }).select("userId");
+				const recruiterIdsFromJobs = jobs.map((job) => job.userId).filter(Boolean);
 
-			filter.userType = "jobSeeker";
-			filter.$or = [
-				{ uploadedBy: req.user._id },
-				{ _id: { $in: candidateIdsFromJobs } }
-			];
+				filter.userType = req.query.type;
+				filter._id = { $in: recruiterIdsFromJobs };
+			} else {
+				const JobApplication = require("../models/jobApplication.model");
+				const jobApps = await JobApplication.find({ jobId: { $in: assignedJobIds } }).select("applicantId");
+				const candidateIdsFromJobs = jobApps.map((app) => app.applicantId).filter(Boolean);
+
+				filter.userType = "jobSeeker";
+				filter.$or = [
+					{ uploadedBy: req.user._id },
+					{ _id: { $in: candidateIdsFromJobs } }
+				];
+			}
 		}
 
 		let users = await User.find(filter, null, options).lean();
