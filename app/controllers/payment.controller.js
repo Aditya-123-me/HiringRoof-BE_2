@@ -114,7 +114,28 @@ paymentController.jobPostPayment = async (req, res, io) => {
 
 paymentController.servicePayment = async (req, res, io) => {
 	try {
-		if (today === req.body.date) res.status(404).send({ status: false, msg: "Please select future date !!", data: [] });
+		const rawDate = req.body.date;
+		const rawTime = req.body.time;
+
+		let dateVal = rawDate;
+		let timeVal = "";
+
+		if (!dateVal || dateVal.trim() === "") {
+			dateVal = new Date().toISOString().split("T")[0];
+		}
+
+		if (!rawTime || rawTime.trim() === "") {
+			const now = new Date();
+			let hours = now.getHours();
+			const minutes = now.getMinutes();
+			const meridiem = hours >= 12 ? "PM" : "AM";
+			hours = hours % 12 || 12;
+			const hoursFormatted = hours < 10 ? "0" + hours : hours;
+			const minutesFormatted = minutes < 10 ? "0" + minutes : minutes;
+			timeVal = `${hoursFormatted}:${minutesFormatted} ${meridiem}`;
+		} else {
+			timeVal = convertTo12HourFormat(rawTime) || rawTime;
+		}
 
 		const bodyData = {};
 
@@ -122,11 +143,14 @@ paymentController.servicePayment = async (req, res, io) => {
 		const totalAmount = parseFloat(((req.body.serviceData?.amount + GST) * 100).toFixed(2));
 
 		bodyData.userId = req.user._id;
-		bodyData.date = req.body.date;
-		bodyData.time = convertTo12HourFormat(req.body.time);
+		bodyData.date = dateVal;
+		bodyData.time = timeVal;
 		bodyData.serviceData = req.body.serviceData;
 		bodyData.totalAmount = totalAmount / 100;
-		const currentDate = new Date(req.body.date);
+		bodyData.note = req.body.note || req.body.desc || req.body.description || "";
+		bodyData.description = req.body.description || req.body.desc || req.body.note || "";
+
+		const currentDate = new Date(dateVal);
 		currentDate.setDate(currentDate.getDate() + 1);
 		const nextDate = currentDate.toISOString().split("T")[0];
 		bodyData.expireDate = nextDate;
@@ -366,7 +390,8 @@ paymentController.status = async (req, res) => {
 
 paymentController.manualServicePayment = async (req, res) => {
 	try {
-		const { date, time } = req.body;
+		const rawDate = req.body.date;
+		const rawTime = req.body.time;
 		let serviceData = req.body.serviceData;
 
 		if (typeof serviceData === "string") {
@@ -375,10 +400,28 @@ paymentController.manualServicePayment = async (req, res) => {
 			} catch (e) {}
 		}
 
-		if (!date) return res.status(400).json({ status: false, msg: "Please select a date!" });
-		if (!time) return res.status(400).json({ status: false, msg: "Please select a time!" });
 		if (!serviceData || (!serviceData.name && !serviceData.title)) return res.status(400).json({ status: false, msg: "Service details are required!" });
 		if (!req.file) return res.status(400).json({ status: false, msg: "Please upload payment screenshot proof!" });
+
+		let dateVal = rawDate;
+		let timeVal = "";
+
+		if (!dateVal || dateVal.trim() === "") {
+			dateVal = new Date().toISOString().split("T")[0];
+		}
+
+		if (!rawTime || rawTime.trim() === "") {
+			const now = new Date();
+			let hours = now.getHours();
+			const minutes = now.getMinutes();
+			const meridiem = hours >= 12 ? "PM" : "AM";
+			hours = hours % 12 || 12;
+			const hoursFormatted = hours < 10 ? "0" + hours : hours;
+			const minutesFormatted = minutes < 10 ? "0" + minutes : minutes;
+			timeVal = `${hoursFormatted}:${minutesFormatted} ${meridiem}`;
+		} else {
+			timeVal = convertTo12HourFormat(rawTime) || rawTime;
+		}
 
 		const screenshotUrl = await imageUpload(req.file, `${req.user._id}_payment_proof_${Date.now()}`, "paymentProof");
 		if (!screenshotUrl) return res.status(500).json({ status: false, msg: "Failed to upload payment screenshot!" });
@@ -386,7 +429,7 @@ paymentController.manualServicePayment = async (req, res) => {
 		const GST = parseFloat(((serviceData.amount * 2) / 100).toFixed(2));
 		const totalAmount = parseFloat((serviceData.amount + GST).toFixed(2));
 
-		const currentDate = new Date(date);
+		const currentDate = new Date(dateVal);
 		currentDate.setMonth(currentDate.getMonth() + 1);
 		const expireDate = currentDate.toISOString().split("T")[0];
 
@@ -402,9 +445,9 @@ paymentController.manualServicePayment = async (req, res) => {
 		const serviceRecord = await serviceModel.create({
 			userId: req.user._id,
 			addonId: req.body.addonId || serviceData._id || serviceData.id || null,
-			date,
+			date: dateVal,
 			expireDate,
-			time,
+			time: timeVal,
 			totalAmount,
 			serviceData,
 			merchantTransactionId,
@@ -412,6 +455,8 @@ paymentController.manualServicePayment = async (req, res) => {
 			isActive: false,
 			paymentScreenshot: screenshotUrl,
 			paymentStatus: "PENDING",
+			note: req.body.note || req.body.desc || req.body.description || "",
+			description: req.body.description || req.body.desc || req.body.note || "",
 		});
 
 		return res.status(200).json({

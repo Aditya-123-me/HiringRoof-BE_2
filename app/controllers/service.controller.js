@@ -6,15 +6,39 @@ const today = new Date().toISOString().split("T")[0];
 
 service.pay = async (req, res) => {
 	try {
-		if (today === req.body.date) res.status(404).send({ status: false, msg: "Please select future date !!", data: [] });
+		const rawDate = req.body.date;
+		const rawTime = req.body.time;
+
+		let dateVal = rawDate;
+		let timeVal = "";
+
+		if (!dateVal || dateVal.trim() === "") {
+			dateVal = new Date().toISOString().split("T")[0];
+		}
+
+		if (!rawTime || rawTime.trim() === "") {
+			const now = new Date();
+			let hours = now.getHours();
+			const minutes = now.getMinutes();
+			const meridiem = hours >= 12 ? "PM" : "AM";
+			hours = hours % 12 || 12;
+			const hoursFormatted = hours < 10 ? "0" + hours : hours;
+			const minutesFormatted = minutes < 10 ? "0" + minutes : minutes;
+			timeVal = `${hoursFormatted}:${minutesFormatted} ${meridiem}`;
+		} else {
+			timeVal = convertTo12HourFormat(rawTime) || rawTime;
+		}
 
 		const bodyData = {};
 		bodyData.userId = req.user._id;
-		bodyData.date = req.body.date;
-		bodyData.time = convertTo12HourFormat(req.body.time);
+		bodyData.date = dateVal;
+		bodyData.time = timeVal;
 		bodyData.serviceData = req.body.serviceData;
 		bodyData.totalAmount = req.body.totalAmount;
-		const currentDate = new Date(req.body.date);
+		bodyData.note = req.body.note || req.body.desc || req.body.description || "";
+		bodyData.description = req.body.description || req.body.desc || req.body.note || "";
+
+		const currentDate = new Date(dateVal);
 		currentDate.setDate(currentDate.getDate() + 1); // 1 day validity
 		const nextDate = currentDate.toISOString().split("T")[0];
 		bodyData.expireDate = nextDate;
@@ -32,7 +56,7 @@ service.myServices = async (req, res) => {
 	try {
 		const expireJobsAndServices = require("../util/expireJobsAndServices");
 		await expireJobsAndServices();
-
+ 
 		const userId = req.user._id;
 		const status = req.query.status;
 

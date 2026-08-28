@@ -4,9 +4,9 @@ const serviceSchema = mongoose.Schema(
 	{
 		userId: { type: mongoose.Schema.Types.ObjectId, ref: "users" },
 		addonId: { type: mongoose.Schema.Types.ObjectId, ref: "addon", default: null },
-		date: { type: String, required: true },
-		expireDate: { type: String, required: true },
-		time: { type: String, required: true },
+		date: { type: String, default: "" },
+		expireDate: { type: String, default: "" },
+		time: { type: String, default: "" },
 		totalAmount: { type: Number, required: true },
 		serviceData: { type: Object, required: true },
 		merchantTransactionId: { type: String, default: "" },
@@ -19,6 +19,8 @@ const serviceSchema = mongoose.Schema(
 			default: "PENDING",
 		},
 		rejectionReason: { type: String, default: "" },
+		note: { type: String, default: "" },
+		description: { type: String, default: "" },
 		
 		// ----------------------------------------------------
 		// HR Assignment & Fulfillment Fields (NEW)

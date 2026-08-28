@@ -43,31 +43,44 @@ superAdmin.getFeedbackDescending = async (req, res) => {
 		if (!isValidMonthFormat(month))
 			return res.status(400).json({ message: "Invalid month format. Please provide month in YYYY-MM format." });
 
-		// If hrId is not provided, set it to undefined so that all HRs will be considered
-		if (hrId === "") hrId = undefined;
-
 		// Parse the month parameter to create the start and end dates of the month
 		const [year, monthNum] = month.split("-");
 		const startDate = new Date(year, monthNum - 1, 1); // Month is zero-indexed in JavaScript
 		const endDate = new Date(year, monthNum, 0);
+		endDate.setHours(23, 59, 59, 999);
 
-		// Query the job applications where feedback is given by the HR and updated within the same month
-		const jobApplications = await JobApplication.find({
-			"feedback.givenBy": hrId,
-			updatedAt: { $gte: startDate, $lt: endDate },
-		}).populate("applicantId applierId jobId");
+		const filter = {
+			updatedAt: { $gte: startDate, $lte: endDate },
+			"feedback.givenBy": { $exists: true, $ne: null }
+		};
 
-		// Query the HR details
-		const hrDetails = await adminUserModel.findById(hrId);
-		// Update each job application with HR details
-		const populatedJobApplications = jobApplications.map((application) => ({
-			...application.toObject(),
-			feedback: {
-				...application.feedback,
-				givenBy: hrDetails, // Assuming you want to replace givenBy with HR details
-			},
-			hrDetails: hrDetails,
-		}));
+		if (hrId && hrId !== "" && hrId !== "ALL" && hrId !== "undefined") {
+			filter["feedback.givenBy"] = hrId;
+		}
+
+		// Query the job applications where feedback is given by the HR
+		const jobApplications = await JobApplication.find(filter)
+			.populate("applicantId applierId jobId")
+			.sort({ updatedAt: -1 });
+
+		// Populate each job application with HR details manually
+		const populatedJobApplications = [];
+		for (const application of jobApplications) {
+			const appObj = application.toObject();
+			const givenById = appObj.feedback?.givenBy;
+			if (givenById) {
+				const hr = await adminUserModel.findById(givenById)
+					.select("name email number profileImage type")
+					.lean();
+				if (hr) {
+					appObj.hrDetails = hr;
+					if (appObj.feedback) {
+						appObj.feedback.givenBy = hr;
+					}
+				}
+			}
+			populatedJobApplications.push(appObj);
+		}
 
 		res.json({
 			status: true,
