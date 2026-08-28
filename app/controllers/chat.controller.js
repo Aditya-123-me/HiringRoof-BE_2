@@ -7,55 +7,108 @@ const userModel = require("../models/user.model");
 
 const chatController = {};
 
-// Get or create conversation room between HR, Recruiter, and Job
+// Get or create conversation room (supports both Job and Service orders)
 chatController.getOrCreateRoom = async (req, res) => {
 	try {
-		let { jobId, hrId, recruiterId } = req.body;
+		let { jobId, serviceId, hrId, recruiterId, userId } = req.body;
 
 		// Detect caller role
 		const isHR = req.user.type === "hr" || req.user.type === "admin" || req.user.type === "sub-admin";
 		if (isHR && !hrId) hrId = req.user._id.toString();
-		if (!isHR && !recruiterId) recruiterId = req.user._id.toString();
+		
+		const targetUserId = userId || recruiterId || (isHR ? null : req.user._id.toString());
 
-		if (!jobId) {
-			return res.status(400).json({ status: false, msg: "Job ID is required!" });
+		// ----------------------------------------------------
+		// A. SERVICE CONVERSATION FLOW
+		// ----------------------------------------------------
+		if (serviceId) {
+			const serviceModel = require("../models/service.model");
+			const service = await serviceModel.findById(serviceId).populate("userId").populate("assignedHR");
+			
+			if (!service) {
+				return res.status(404).json({ status: false, msg: "Service order not found!" });
+			}
+
+			const finalUserId = targetUserId || service.userId?._id?.toString() || service.userId?.toString();
+			const finalHrId = hrId || service.assignedHR?._id?.toString() || service.assignedHR?.toString();
+
+			if (!finalHrId) {
+				return res.status(400).json({ status: false, msg: "HR is not yet assigned for this service!" });
+			}
+
+			const roomId = `hr_${finalHrId}_user_${finalUserId}_service_${serviceId}`;
+
+			let conversation = await conversationModel.findOne({ roomId })
+				.populate("hrId", "name email number profileImage")
+				.populate("userId", "name email profileImage companyName userType phone")
+				.populate("serviceId");
+
+			if (!conversation) {
+				conversation = await conversationModel.create({
+					roomId,
+					conversationType: "service",
+					hrId: finalHrId,
+					userId: finalUserId,
+					recruiterId: finalUserId,
+					serviceId: service._id,
+					lastMessage: "Service conversation started",
+					lastMessageAt: new Date(),
+				});
+
+				conversation = await conversationModel.findById(conversation._id)
+					.populate("hrId", "name email number profileImage")
+					.populate("userId", "name email profileImage companyName userType phone")
+					.populate("serviceId");
+			}
+
+			return res.status(200).json({
+				status: true,
+				data: conversation,
+				roomId,
+			});
 		}
 
-		// If HR is missing, look up assigned HR for this job
-		if (!hrId) {
+		// ----------------------------------------------------
+		// B. JOB CONVERSATION FLOW
+		// ----------------------------------------------------
+		if (!jobId) {
+			return res.status(400).json({ status: false, msg: "jobId or serviceId is required!" });
+		}
+
+		let finalRecruiterId = targetUserId;
+		if (!finalRecruiterId) {
+			const job = await jobModel.findById(jobId).select("userId");
+			if (job && job.userId) finalRecruiterId = job.userId.toString();
+		}
+
+		let finalHrId = hrId;
+		if (!finalHrId) {
 			const assignedAdmin = await adminUserModel.findOne({
 				"jobTarget.jobIds.jobId": jobId,
 				isDeleted: { $ne: true }
 			}).select("_id");
-			if (assignedAdmin) {
-				hrId = assignedAdmin._id.toString();
-			}
+			if (assignedAdmin) finalHrId = assignedAdmin._id.toString();
 		}
 
-		// If Recruiter is missing, look up job poster
-		if (!recruiterId) {
-			const job = await jobModel.findById(jobId).select("userId");
-			if (job && job.userId) {
-				recruiterId = job.userId.toString();
-			}
-		}
-
-		if (!hrId || !recruiterId) {
+		if (!finalHrId || !finalRecruiterId) {
 			return res.status(400).json({ status: false, msg: "HR ID and Recruiter ID could not be resolved for this job!" });
 		}
 
-		const roomId = `hr_${hrId}_recruiter_${recruiterId}_job_${jobId}`;
+		const roomId = `hr_${finalHrId}_recruiter_${finalRecruiterId}_job_${jobId}`;
 
 		let conversation = await conversationModel.findOne({ roomId })
 			.populate("hrId", "name email number profileImage")
 			.populate("recruiterId", "name email profileImage companyName")
+			.populate("userId", "name email profileImage companyName")
 			.populate("jobId", "jobTittle companyName companyLogo location");
 
 		if (!conversation) {
 			const newConv = await conversationModel.create({
 				roomId,
-				hrId,
-				recruiterId,
+				conversationType: "job",
+				hrId: finalHrId,
+				userId: finalRecruiterId,
+				recruiterId: finalRecruiterId,
 				jobId,
 				lastMessage: "Conversation started",
 				lastMessageAt: new Date(),
@@ -64,6 +117,7 @@ chatController.getOrCreateRoom = async (req, res) => {
 			conversation = await conversationModel.findById(newConv._id)
 				.populate("hrId", "name email number profileImage")
 				.populate("recruiterId", "name email profileImage companyName")
+				.populate("userId", "name email profileImage companyName")
 				.populate("jobId", "jobTittle companyName companyLogo location");
 		}
 
@@ -78,18 +132,22 @@ chatController.getOrCreateRoom = async (req, res) => {
 	}
 };
 
-// Get all conversations for logged in user (HR or Recruiter)
+// Get all conversations for logged in user (HR or Candidate/Recruiter)
 chatController.getConversations = async (req, res) => {
 	try {
 		const userId = req.user._id;
 		const isHR = req.user.type === "hr" || req.user.type === "admin" || req.user.type === "sub-admin";
 
-		const query = isHR ? { hrId: userId } : { recruiterId: userId };
+		const query = isHR 
+			? { hrId: userId } 
+			: { $or: [{ userId }, { recruiterId: userId }] };
 
 		const conversations = await conversationModel.find(query)
 			.populate("hrId", "name email number profileImage")
+			.populate("userId", "name email profileImage companyName userType phone")
 			.populate("recruiterId", "name email profileImage companyName")
 			.populate("jobId", "jobTittle companyName companyLogo location vacancies")
+			.populate("serviceId")
 			.sort({ lastMessageAt: -1 });
 
 		return res.status(200).json({

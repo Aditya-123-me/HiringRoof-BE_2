@@ -18,6 +18,11 @@ module.exports = (router, io) => {
 	router.put("/superAdmin/set-candidate-status", adminAuthorization, superAdmin.setCandidateStatus);
 	router.get("/superAdmin/candidates-by-status", adminAuthorization, superAdmin.getCandidatesByStatus);
 	router.put("/superAdmin/candidate-selection", adminAuthorization, superAdmin.updateCandidateSelection);
-	router.put("superAdmin/job/edit/:jobId", adminAuthorization, jobController.editJobPost);
+	router.put("/superAdmin/job/edit/:jobId", adminAuthorization, jobController.editJobPost);
+	router.get("/superAdmin/service-orders", adminAuthorization, superAdmin.getServiceOrders);
+	router.put("/superAdmin/assign-service-hr", adminAuthorization, (req, res) => superAdmin.assignServiceHR(req, res, io));
+		// Super Admin All Conversations & Chat Audit APIs
+	router.get("/superAdmin/all-conversations", adminAuthorization, superAdmin.getAllConversations);
+	router.get("/superAdmin/conversation-messages/:roomId", adminAuthorization, superAdmin.getConversationMessages);
 
 };

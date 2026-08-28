@@ -36,6 +36,23 @@ const adminUserSchema = mongoose.Schema(
 				],
 			},
 		],
+		// Inside adminUserSchema:
+serviceTarget: [
+	{
+		month: { type: String }, // e.g. "2026-08"
+		serviceIds: [
+			{
+				serviceId: { type: mongoose.Schema.Types.ObjectId, ref: "service" },
+				assignedDate: { type: Date, default: Date.now },
+				status: { type: String, default: "ASSIGNED" }
+			}
+		],
+		totalAssigned: { type: Number, default: 0 },
+		totalCompleted: { type: Number, default: 0 }
+	}
+],
+totalServicesAssigned: { type: Number, default: 0 },
+totalServicesCompleted: { type: Number, default: 0 },
 		isActive: { type: Boolean, default: true },
 		isDeleted: { type: Boolean, default: false },
 		isFreelancer: { type: Boolean, default: false },

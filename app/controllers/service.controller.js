@@ -38,10 +38,11 @@ service.myServices = async (req, res) => {
 
 		let data = null;
 		let dataCount = 0;
-		const dataAll = await serviceModel.find({ userId }).sort({ createdAt: -1 }).populate({
-			path: "userId",
-			select: "name phone email profileImage userType",
-		});
+		const dataAll = await serviceModel.find({ userId })
+			.sort({ createdAt: -1 })
+			.populate({ path: "userId", select: "name phone email profileImage userType" })
+			.populate({ path: "assignedHR", select: "name email number phone profileImage" })
+			.populate("addonId");
 		const dataCountAll = await serviceModel.countDocuments({ userId });
 
 		await Promise.all(
@@ -54,10 +55,7 @@ service.myServices = async (req, res) => {
 					else if (item.expireDate < today) isActive = false;
 				}
 
-				const d = await serviceModel.findByIdAndUpdate(item._id, { isActive: isActive }, { new: true }).populate({
-					path: "userId",
-					select: "name phone email profileImage userType",
-				});
+				await serviceModel.findByIdAndUpdate(item._id, { isActive: isActive }, { new: true });
 			})
 		);
 
@@ -65,22 +63,25 @@ service.myServices = async (req, res) => {
 			data = dataAll; 
 			dataCount = dataCountAll;
 		} else if (status === "active") {
-			data = await serviceModel.find({ userId, isActive: true }).sort({ createdAt: -1 }).populate({
-				path: "userId",
-				select: "name phone email profileImage userType",
-			});
+			data = await serviceModel.find({ userId, isActive: true })
+				.sort({ createdAt: -1 })
+				.populate({ path: "userId", select: "name phone email profileImage userType" })
+				.populate({ path: "assignedHR", select: "name email number phone profileImage" })
+				.populate("addonId");
 			dataCount = await serviceModel.countDocuments({ userId, isActive: true });
 		} else if (status === "expired") {
-			data = await serviceModel.find({ userId, isActive: false }).sort({ createdAt: -1 }).populate({
-				path: "userId",
-				select: "name phone email profileImage userType",
-			});
+			data = await serviceModel.find({ userId, isActive: false })
+				.sort({ createdAt: -1 })
+				.populate({ path: "userId", select: "name phone email profileImage userType" })
+				.populate({ path: "assignedHR", select: "name email number phone profileImage" })
+				.populate("addonId");
 			dataCount = await serviceModel.countDocuments({ userId, isActive: false });
 		} else if (status === "upcoming") {
-			data = await serviceModel.find({ userId, isActive: null }).sort({ createdAt: -1 }).populate({
-				path: "userId",
-				select: "name phone email profileImage userType",
-			});
+			data = await serviceModel.find({ userId, isActive: null })
+				.sort({ createdAt: -1 })
+				.populate({ path: "userId", select: "name phone email profileImage userType" })
+				.populate({ path: "assignedHR", select: "name email number phone profileImage" })
+				.populate("addonId");
 			dataCount = await serviceModel.countDocuments({ userId, isActive: null });
 		}
 
@@ -179,6 +180,76 @@ service.submitRateReview = async (req, res) => {
 		return res.status(200).json({ status: true, msg: "Review submitted successfully!" });
 	} catch (error) {
 		console.error("Error in submitRateReview:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+/**
+ * GET /service/hr-assigned-services
+ * Fetches all candidate/recruiter service requests assigned to the logged-in HR
+ */
+service.getHRAssignedServices = async (req, res) => {
+	try {
+		const hrId = req.user._id;
+		const { status, page = 1, limit = 20 } = req.query;
+
+		const filter = { assignedHR: hrId };
+		if (status && status !== "ALL") {
+			filter.fulfillmentStatus = status;
+		}
+
+		const skip = (Number(page) - 1) * Number(limit);
+
+		const [services, total] = await Promise.all([
+			serviceModel.find(filter)
+				.populate("userId", "name email phone profileImage userType")
+				.populate("addonId")
+				.sort({ createdAt: -1 })
+				.skip(skip)
+				.limit(Number(limit)),
+			serviceModel.countDocuments(filter),
+		]);
+
+		return res.status(200).json({
+			status: true,
+			total,
+			page: Number(page),
+			pages: Math.ceil(total / Number(limit)),
+			data: services,
+		});
+	} catch (error) {
+		console.error("Error in getHRAssignedServices:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+/**
+ * PUT /service/update-fulfillment-status/:id
+ * Allows assigned HR to update service progress, checklist & fulfillment status
+ */
+service.updateFulfillmentStatus = async (req, res) => {
+	try {
+		const { id } = req.params;
+		const { fulfillmentStatus, workDone, workPending, progressPercentage } = req.body;
+
+		const targetService = await serviceModel.findById(id);
+		if (!targetService) {
+			return res.status(404).json({ status: false, msg: "Service record not found!" });
+		}
+
+		if (fulfillmentStatus) targetService.fulfillmentStatus = fulfillmentStatus;
+		if (workDone !== undefined) targetService.workDone = Array.isArray(workDone) ? workDone : [];
+		if (workPending !== undefined) targetService.workPending = Array.isArray(workPending) ? workPending : [];
+		if (progressPercentage !== undefined) targetService.progressPercentage = Number(progressPercentage);
+
+		await targetService.save();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Service fulfillment status updated successfully!",
+			data: targetService,
+		});
+	} catch (error) {
+		console.error("Error in updateFulfillmentStatus:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };

@@ -19,6 +19,36 @@ const serviceSchema = mongoose.Schema(
 			default: "PENDING",
 		},
 		rejectionReason: { type: String, default: "" },
+		
+		// ----------------------------------------------------
+		// HR Assignment & Fulfillment Fields (NEW)
+		// ----------------------------------------------------
+		assignedHR: { 
+			type: mongoose.Schema.Types.ObjectId, 
+			ref: "adminUser", 
+			default: null 
+		},
+		assignedBy: { 
+			type: mongoose.Schema.Types.ObjectId, 
+			ref: "adminUser", 
+			default: null 
+		},
+		assignedAt: { 
+			type: Date, 
+			default: null 
+		},
+		fulfillmentStatus: {
+			type: String,
+			enum: ["UNASSIGNED", "ASSIGNED", "IN_PROGRESS", "COMPLETED", "CANCELLED"],
+			default: "UNASSIGNED",
+		},
+		serviceCategory: {
+			type: String,
+			enum: ["candidateService", "recruiterService", "jobPostAddon", "general"],
+			default: "general",
+		},
+
+		// Feedback & Progress Checklist
 		rating: { type: Number, default: 0 },
 		reviewText: { type: String, default: "" },
 		workDone: { type: [String], default: [] },

@@ -629,4 +629,243 @@ superAdmin.updateCandidateSelection = async (req, res) => {
 	}
 };
 
+/**
+ * GET /superAdmin/service-orders
+ * Fetches all candidate & recruiter service purchases with filters for fulfillment & HR assignment
+ */
+superAdmin.getServiceOrders = async (req, res) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const { fulfillmentStatus, hrId, serviceCategory, page = 1, limit = 20 } = req.query;
+
+		const filter = {
+			paymentStatus: "APPROVED", // Only approved purchases need fulfillment
+		};
+
+		if (fulfillmentStatus && fulfillmentStatus !== "ALL") {
+			filter.fulfillmentStatus = fulfillmentStatus;
+		}
+
+		if (hrId && hrId !== "ALL") {
+			filter.assignedHR = hrId;
+		}
+
+		if (serviceCategory && serviceCategory !== "ALL") {
+			filter.serviceCategory = serviceCategory;
+		}
+
+		const skip = (Number(page) - 1) * Number(limit);
+
+		const [services, total] = await Promise.all([
+			serviceModel.find(filter)
+				.populate("userId", "name email phone profileImage userType")
+				.populate("assignedHR", "name email number profileImage")
+				.populate("assignedBy", "name email")
+				.populate("addonId")
+				.sort({ createdAt: -1 })
+				.skip(skip)
+				.limit(Number(limit)),
+			serviceModel.countDocuments(filter),
+		]);
+
+		return res.status(200).json({
+			status: true,
+			total,
+			page: Number(page),
+			pages: Math.ceil(total / Number(limit)),
+			data: services,
+		});
+	} catch (error) {
+		console.error("Error in getServiceOrders:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+/**
+ * PUT /superAdmin/assign-service-hr
+ * Assigns or reassigns an HR Admin to a purchased service order & initializes conversation room
+ */
+superAdmin.assignServiceHR = async (req, res, io) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const conversationModel = require("../models/conversation.model");
+		const adminUserModel = require("../models/adminUser.model");
+		const createNotification = require("../util/createNotification");
+
+		const { serviceId, hrId } = req.body;
+
+		if (!serviceId || !hrId) {
+			return res.status(400).json({ status: false, msg: "serviceId and hrId are required!" });
+		}
+
+		const service = await serviceModel.findById(serviceId).populate("userId");
+		if (!service) {
+			return res.status(404).json({ status: false, msg: "Service order not found!" });
+		}
+
+		const hrAdmin = await adminUserModel.findById(hrId);
+		if (!hrAdmin) {
+			return res.status(404).json({ status: false, msg: "HR Admin not found!" });
+		}
+
+		// 1. Update Service Record
+		service.assignedHR = hrId;
+		service.assignedBy = req.user._id;
+		service.assignedAt = new Date();
+		service.fulfillmentStatus = "ASSIGNED";
+		await service.save();
+
+		// 2. Initialize / Get Conversation Room
+		const roomId = `hr_${hrId}_user_${service.userId._id}_service_${serviceId}`;
+
+		let conversation = await conversationModel.findOne({ roomId });
+		if (!conversation) {
+			conversation = await conversationModel.create({
+				roomId,
+				conversationType: "service",
+				hrId,
+				userId: service.userId._id,
+				recruiterId: service.userId._id,
+				serviceId: service._id,
+				lastMessage: `Service fulfillment thread started for "${service.serviceData?.title || "Service Order"}"`,
+				lastMessageAt: new Date(),
+			});
+		} else {
+			conversation.hrId = hrId;
+			await conversation.save();
+		}
+
+		// 3. Optional: Push in-app notifications
+		try {
+			if (createNotification && io) {
+				const userNotif = await createNotification({
+					senderId: hrId,
+					receiverId: service.userId._id,
+					title: "HR Assigned for Your Service",
+					desc: `${hrAdmin.name} has been assigned to assist with your "${service.serviceData?.title || "service"}". You can now chat directly!`,
+					logo: hrAdmin.profileImage || "",
+				});
+				io.emit(`notifications_${service.userId._id}`, userNotif);
+			}
+		} catch (notifErr) {
+			console.log("Notification error skipped:", notifErr.message);
+		}
+
+		return res.status(200).json({
+			status: true,
+			msg: `Service assigned to ${hrAdmin.name} successfully!`,
+			data: {
+				service,
+				conversation,
+				roomId,
+			},
+		});
+	} catch (error) {
+		console.error("Error in assignServiceHR:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+/**
+ * GET /superAdmin/all-conversations
+ * Allows Super Admin to view, search, and monitor all platform chat conversations
+ * Query Params: { conversationType: "ALL"|"job"|"service", hrId, search, page, limit }
+ */
+superAdmin.getAllConversations = async (req, res) => {
+	try {
+		const conversationModel = require("../models/conversation.model");
+		const { conversationType, hrId, search, page = 1, limit = 20 } = req.query;
+
+		const filter = {};
+
+		// Filter by conversation type (job hiring or service fulfillment)
+		if (conversationType && conversationType !== "ALL") {
+			filter.conversationType = conversationType;
+		}
+
+		// Filter by assigned HR Admin
+		if (hrId && hrId !== "ALL") {
+			filter.hrId = hrId;
+		}
+
+		const skip = (Number(page) - 1) * Number(limit);
+
+		let conversationsQuery = conversationModel.find(filter)
+			.populate("hrId", "name email number phone profileImage")
+			.populate("userId", "name email phone profileImage userType companyName")
+			.populate("recruiterId", "name email profileImage companyName")
+			.populate("jobId", "jobTittle companyName companyLogo location vacancies")
+			.populate({
+				path: "serviceId",
+				populate: { path: "addonId", select: "title amount type" }
+			})
+			.sort({ lastMessageAt: -1 })
+			.skip(skip)
+			.limit(Number(limit));
+
+		const [conversations, total] = await Promise.all([
+			conversationsQuery,
+			conversationModel.countDocuments(filter),
+		]);
+
+		// Optional in-memory search filtering by participant or job/service name
+		let filteredData = conversations;
+		if (search && search.trim()) {
+			const s = search.trim().toLowerCase();
+			filteredData = conversations.filter((c) => {
+				const hrName = c.hrId?.name?.toLowerCase() || "";
+				const userName = c.userId?.name?.toLowerCase() || "";
+				const userEmail = c.userId?.email?.toLowerCase() || "";
+				const jobTitle = c.jobId?.jobTittle?.toLowerCase() || "";
+				const serviceTitle = c.serviceId?.serviceData?.title?.toLowerCase() || "";
+				return (
+					hrName.includes(s) ||
+					userName.includes(s) ||
+					userEmail.includes(s) ||
+					jobTitle.includes(s) ||
+					serviceTitle.includes(s)
+				);
+			});
+		}
+
+		return res.status(200).json({
+			status: true,
+			total,
+			page: Number(page),
+			pages: Math.ceil(total / Number(limit)),
+			data: filteredData,
+		});
+	} catch (error) {
+		console.error("Error in getAllConversations:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+/**
+ * GET /superAdmin/conversation-messages/:roomId
+ * Allows Super Admin to view complete message history of any conversation room
+ */
+superAdmin.getConversationMessages = async (req, res) => {
+	try {
+		const messageModel = require("../models/message.model");
+		const { roomId } = req.params;
+		const page = parseInt(req.query.page) || 1;
+		const limit = parseInt(req.query.limit) || 100;
+		const skip = (page - 1) * limit;
+
+		const messages = await messageModel.find({ roomId })
+			.sort({ createdAt: 1 })
+			.skip(skip)
+			.limit(limit);
+
+		return res.status(200).json({
+			status: true,
+			data: messages,
+		});
+	} catch (error) {
+		console.error("Error in getConversationMessages:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = superAdmin;
