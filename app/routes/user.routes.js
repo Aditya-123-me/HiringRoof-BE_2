@@ -62,4 +62,5 @@ module.exports = (router, io) => {
 	router.put("/user/education-adminSide/:_id", adminAuthorization, userController.education);
 	router.post("/user/badge-remove-request", authorization, userController.addBadgeRemoveRequest);
 	router.get("/user/my-badge-remove-requests", authorization, userController.getMyBadgeRemoveRequests);
+	router.get("/user/my-assigned-hrs", authorization, userController.getMyAssignedHRs);
 };

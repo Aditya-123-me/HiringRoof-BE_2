@@ -85,10 +85,19 @@ addonController.listAdmin = async (req, res) => {
 			.populate("createdBy", "name email")
 			.sort({ createdAt: -1 });
 
+		const addON = addons.filter((a) => a.type === "jobPostAddon" || a.type === "general");
+		const recruiterServices = addons.filter((a) => a.type === "recruiterService");
+		const candidateServices = addons.filter((a) => a.type === "candidateService");
+
 		return res.status(200).json({
 			status: true,
 			msg: "All addons fetched successfully!",
-			data: addons,
+			data: {
+				addON,
+				recruiterServices,
+				candidateServices,
+				all: addons,
+			},
 		});
 	} catch (error) {
 		console.error("Error in addonController.listAdmin:", error);
@@ -96,14 +105,24 @@ addonController.listAdmin = async (req, res) => {
 	}
 };
 
-// Get active addons list for recruiters (Public/Recruiters)
+// Get active addons list separated by category (Public/Recruiters/Candidates)
 addonController.listRecruiter = async (req, res) => {
 	try {
 		const addons = await addonModel.find({ isActive: true }).sort({ createdAt: -1 });
+
+		const addON = addons.filter((a) => a.type === "jobPostAddon" || a.type === "general");
+		const recruiterServices = addons.filter((a) => a.type === "recruiterService");
+		const candidateServices = addons.filter((a) => a.type === "candidateService");
+
 		return res.status(200).json({
 			status: true,
-			msg: "Active addons fetched successfully!",
-			data: addons,
+			msg: "Active addons and services fetched successfully!",
+			data: {
+				addON,
+				recruiterServices,
+				candidateServices,
+				all: addons,
+			},
 		});
 	} catch (error) {
 		console.error("Error in addonController.listRecruiter:", error);

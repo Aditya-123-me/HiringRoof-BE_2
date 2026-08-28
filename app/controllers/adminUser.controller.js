@@ -326,18 +326,17 @@ adminUser.assignJob = async (req, res, io) => {
 		// Validate job target
 		let targetIndex = user.jobTarget.findIndex((obj) => obj.year === year && obj.month.toLowerCase() === month.toLowerCase());
 		if (targetIndex === -1) {
-			// FIXME: pre month target or 0
 			const data = {
 				year: year,
 				month: month.toLowerCase(),
 				jobsTarget: 0,
+				jobIds: [],
 			};
 
 			user.jobTarget.push(data);
-			await user.save();
-			targetIndex = 0;
+			targetIndex = user.jobTarget.length - 1;
 		}
-		const isPresent = user.jobTarget.find((obj) => obj.year === year && obj.month.toLowerCase() === month.toLowerCase());
+		const isPresent = user.jobTarget[targetIndex];
 
 		// Iterate through each job ID and assign to user if not already assigned
 		for (const jobId of jobIdsArray) {
@@ -566,16 +565,23 @@ adminUser.getUnassignedJobs = async (req, res) => {
 		// Collect all job IDs that are assigned to any admin
 		const assignedJobIds = new Set();
 		adminUsers.forEach((adminUser) => {
-			adminUser.jobTarget.forEach((target) => {
-				target.jobIds.forEach((jobTarget) => {
-					assignedJobIds.add(jobTarget.jobId.toString());
+			if (adminUser.jobTarget && Array.isArray(adminUser.jobTarget)) {
+				adminUser.jobTarget.forEach((target) => {
+					if (target.jobIds && Array.isArray(target.jobIds)) {
+						target.jobIds.forEach((jobTarget) => {
+							if (jobTarget && jobTarget.jobId) {
+								assignedJobIds.add(jobTarget.jobId.toString());
+							}
+						});
+					}
 				});
-			});
+			}
 		});
 
 		// Build the query filter for unassigned jobs
 		const filter = {
 			_id: { $nin: Array.from(assignedJobIds) },
+			isDeleted: { $ne: true },
 		};
 
 		// Add optional filters based on request parameters

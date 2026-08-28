@@ -1,6 +1,5 @@
 const Freelancer = require("../models/freelancer.model");
 const AdminUser = require("../models/adminUser.model");
-const bcrypt = require("bcrypt"); // assuming bcrypt is used for password hashing
 const sendMail = require("../util/sendMail.js");
 const { getApprovalMailTemplate } = require("../util/ApprovalMailTemplate");
 const { getRejectionMailTemplate } = require("../util/RejectionMailTemplate");

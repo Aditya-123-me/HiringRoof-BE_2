@@ -93,6 +93,68 @@ module.exports = (io) => {
 				.catch((e) => console.log(e));
 		});
 
+		// Recruiter <-> HR Direct Chat Socket Events
+		const messageModel = require("../models/message.model");
+		const conversationModel = require("../models/conversation.model");
+
+		socket.on("joinChatRoom", async (roomId) => {
+			socket.join(roomId);
+			const history = await messageModel.find({ roomId }).sort({ createdAt: 1 }).limit(100);
+			socket.emit(`chatHistory_${roomId}`, history);
+		});
+
+		socket.on("leaveChatRoom", (roomId) => {
+			socket.leave(roomId);
+		});
+
+		socket.on("sendChatMessage", async (data) => {
+			try {
+				const { roomId, text, senderId, senderType, conversationId, attachments } = data;
+				if (!roomId || !text?.trim()) return;
+
+				const message = await messageModel.create({
+					conversationId: conversationId || null,
+					roomId,
+					senderId,
+					senderType: senderType || "user",
+					text: text.trim(),
+					attachments: Array.isArray(attachments) ? attachments : [],
+				});
+
+				// Update conversation record
+				const isHR = senderType === "hr" || senderType === "adminUser";
+				const updateData = {
+					lastMessage: text.trim(),
+					lastMessageAt: new Date(),
+				};
+				if (isHR) {
+					updateData.$inc = { unreadCountRecruiter: 1 };
+				} else {
+					updateData.$inc = { unreadCountHR: 1 };
+				}
+
+				if (conversationId) {
+					await conversationModel.findByIdAndUpdate(conversationId, updateData);
+				} else {
+					await conversationModel.findOneAndUpdate({ roomId }, updateData);
+				}
+
+				// Broadcast to room
+				io.to(roomId).emit(`newChatMessage_${roomId}`, message);
+				socket.broadcast.to(roomId).emit(`chat_notification_${roomId}`, message);
+			} catch (err) {
+				console.error("Socket sendChatMessage error:", err);
+			}
+		});
+
+		socket.on("typing", ({ roomId, senderName }) => {
+			socket.to(roomId).emit(`typing_${roomId}`, { senderName });
+		});
+
+		socket.on("stopTyping", ({ roomId }) => {
+			socket.to(roomId).emit(`stopTyping_${roomId}`);
+		});
+
 		socket.on("disconnect", () => {
 			console.log("User disconnected");
 		});

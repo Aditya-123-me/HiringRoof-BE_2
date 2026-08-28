@@ -10,6 +10,7 @@ const { deleteFromFirebase, imageUpload } = require("../util/googleDrive.util");
 const { getVideoDurationInSeconds } = require("get-video-duration");
 const fs = require("fs");
 const jobModel = require("../models/job.model");
+const adminUserModel = require("../models/adminUser.model");
 const convertTo12HourFormat = require("../util/convertTo12HourFormat");
 const BadgeRemoveRequestModel = require("../models/BadgeRemoveRequest.model");
 
@@ -1054,12 +1055,12 @@ userController.addBadgeRemoveRequest = async (req, res) => {
 		const user = req.user;
 		const { reason } = req.body;
 
-		// Check if user currently has a selected badge or selection history
-		const hasBadge = user.selectedBadge || (user.selectionCount && user.selectionCount > 0);
+		// Check if user currently has a selected badge, custom badge, or selection history
+		const hasBadge = user.selectedBadge || (user.selectionCount && user.selectionCount > 0) || (user.badge && user.badge.trim() !== "");
 		if (!hasBadge) {
 			return res.status(400).json({
 				status: false,
-				msg: "You do not have an active selected badge to request removal for.",
+				msg: "You do not have an active badge to request removal for.",
 			});
 		}
 
@@ -1111,6 +1112,43 @@ userController.getMyBadgeRemoveRequests = async (req, res) => {
 		console.error("Error in getMyBadgeRemoveRequests:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
+};
+userController.getMyAssignedHRs = async (req, res) => {
+  try {
+    const recruiterId = req.user._id;
+
+    const jobs = await jobModel.find({ userId: recruiterId, isDeleted: false })
+      .select("_id jobTittle companyName location jobType vacancies createdAt");
+    const hrAdmins = await adminUserModel.find({
+      isDeleted: { $ne: true },
+      type: { $in: ["hr", "admin", "sub-admin"] }
+    }).select("_id name email number profileImage jobTarget").lean();
+
+    // 3. Map HR details to each job
+    const jobsWithHR = jobs.map(job => {
+      const assignedHR = hrAdmins.find(hr => 
+        hr.jobTarget && Array.isArray(hr.jobTarget) && hr.jobTarget.some(target => 
+          target.jobIds && Array.isArray(target.jobIds) && target.jobIds.some(j => {
+            const jId = j?.jobId?._id ? j.jobId._id.toString() : j?.jobId ? j.jobId.toString() : null;
+            return jId && jId === job._id.toString();
+          })
+        )
+      );
+      return {
+        ...job.toObject(),
+        assignedHR: assignedHR ? {
+          _id: assignedHR._id,
+          name: assignedHR.name,
+          email: assignedHR.email,
+          phone: assignedHR.number || assignedHR.phone || "",
+          profileImage: assignedHR.profileImage,
+        } : null
+      };
+    });
+    return res.status(200).json({ status: true, data: jobsWithHR });
+  } catch (error) {
+    return res.status(500).json({ status: false, msg: error.message });
+  }
 };
 
 

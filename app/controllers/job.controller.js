@@ -41,7 +41,22 @@ jobController.post = async (req, res, io) => {
 		bodyData.payType = req.body.payType;
 		bodyData.location = req.body.location;
 		bodyData.companyName = req.body.companyName;
-		if (req.body.stream) bodyData.stream = JSON.parse(req.body.stream);
+		if (req.body.stream) {
+			try {
+				bodyData.stream = typeof req.body.stream === "string" ? JSON.parse(req.body.stream) : req.body.stream;
+			} catch (e) {
+				bodyData.stream = Array.isArray(req.body.stream) ? req.body.stream : [req.body.stream];
+			}
+		}
+
+		if (!bodyData.stream || !Array.isArray(bodyData.stream) || bodyData.stream.length === 0) {
+			return res.status(400).json({
+				status: false,
+				job: {},
+				msg: "Please select at least one educational stream (Arts, Commerce, or Science)!",
+			});
+		}
+
 		if (req.body.experience) bodyData.experience = req.body.experience;
 		if (req.body.availability) bodyData.availability = req.body.availability;
 		if (req.body.serviceType) bodyData.serviceType = req.body.serviceType;
@@ -526,6 +541,11 @@ jobController.myJobs = async (req, res) => {
 			.lean();
 		const jobCount = await Job.countDocuments({ userId: req.user._id, isDeleted: { $ne: true } });
 
+		const hrAdmins = await adminUserModel.find({
+			isDeleted: { $ne: true },
+			type: { $in: ["hr", "admin", "sub-admin"] }
+		}).select("_id name email number profileImage jobTarget").lean();
+
 		const jobs = [];
 
 		await Promise.all(
@@ -538,18 +558,27 @@ jobController.myJobs = async (req, res) => {
 				hired = await jobApplicationModel.countDocuments({ jobId: e._id, selectedCandidates: true });
 				rejected = await jobApplicationModel.countDocuments({ jobId: e._id, selectedCandidates: false });
 
-				// jobs.push({
-				// 	...e,
-				// 	inProcess,
-				// 	hired,
-				// 	rejected,
-				// });
+				const assignedHR = hrAdmins.find(hr => 
+					hr.jobTarget && Array.isArray(hr.jobTarget) && hr.jobTarget.some(target => 
+						target.jobIds && Array.isArray(target.jobIds) && target.jobIds.some(j => {
+							const jId = j?.jobId?._id ? j.jobId._id.toString() : j?.jobId ? j.jobId.toString() : null;
+							return jId && jId === e._id.toString();
+						})
+					)
+				);
 
 				jobs[index] = {
 					...e,
 					inProcess,
 					hired,
 					rejected,
+					assignedHR: assignedHR ? {
+						_id: assignedHR._id,
+						name: assignedHR.name,
+						email: assignedHR.email,
+						phone: assignedHR.number || assignedHR.phone || "",
+						profileImage: assignedHR.profileImage,
+					} : null
 				};
 			})
 		);
@@ -899,8 +928,20 @@ jobController.createWithAddon = async (req, res, io) => {
 		bodyData.companyName = parsedJobData.companyName || ownUser.companyName;
 		
 		if (parsedJobData.stream) {
-			bodyData.stream = Array.isArray(parsedJobData.stream) ? parsedJobData.stream : JSON.parse(parsedJobData.stream);
+			try {
+				bodyData.stream = Array.isArray(parsedJobData.stream) ? parsedJobData.stream : JSON.parse(parsedJobData.stream);
+			} catch (e) {
+				bodyData.stream = Array.isArray(parsedJobData.stream) ? parsedJobData.stream : [parsedJobData.stream];
+			}
 		}
+
+		if (!bodyData.stream || !Array.isArray(bodyData.stream) || bodyData.stream.length === 0) {
+			return res.status(400).json({
+				status: false,
+				msg: "Please select at least one educational stream (Arts, Commerce, or Science)!",
+			});
+		}
+
 		if (parsedJobData.experience) bodyData.experience = parsedJobData.experience;
 		if (parsedJobData.availability) bodyData.availability = parsedJobData.availability;
 		bodyData.serviceType = parsedJobData.serviceType;
@@ -1216,8 +1257,18 @@ jobController.editJobPost = async (req, res) => {
 			}
 		});
 
-		if (req.body.stream && typeof req.body.stream === "string") {
-			try { updateData.stream = JSON.parse(req.body.stream); } catch (e) {}
+		if (req.body.stream !== undefined) {
+			try {
+				updateData.stream = typeof req.body.stream === "string" ? JSON.parse(req.body.stream) : req.body.stream;
+			} catch (e) {
+				updateData.stream = Array.isArray(req.body.stream) ? req.body.stream : [req.body.stream];
+			}
+			if (!updateData.stream || !Array.isArray(updateData.stream) || updateData.stream.length === 0) {
+				return res.status(400).json({
+					status: false,
+					msg: "Please select at least one educational stream (Arts, Commerce, or Science)!",
+				});
+			}
 		}
 		if (req.body.skills && typeof req.body.skills === "string") {
 			try { updateData.skills = JSON.parse(req.body.skills); } catch (e) {}
