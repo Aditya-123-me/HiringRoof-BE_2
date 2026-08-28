@@ -639,7 +639,7 @@ superAdmin.getServiceOrders = async (req, res) => {
 		const { fulfillmentStatus, hrId, serviceCategory, page = 1, limit = 20 } = req.query;
 
 		const filter = {
-			paymentStatus: "APPROVED", // Only approved purchases need fulfillment
+			paymentStatus: { $ne: "REJECTED" },
 		};
 
 		if (fulfillmentStatus && fulfillmentStatus !== "ALL") {
@@ -713,6 +713,7 @@ superAdmin.assignServiceHR = async (req, res, io) => {
 		service.assignedBy = req.user._id;
 		service.assignedAt = new Date();
 		service.fulfillmentStatus = "ASSIGNED";
+		service.paymentStatus = "APPROVED";
 		await service.save();
 
 		// 2. Initialize / Get Conversation Room

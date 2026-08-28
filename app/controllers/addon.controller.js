@@ -262,6 +262,8 @@ addonController.purchases = async (req, res) => {
 			]
 		})
 		.populate("userId", "name email phone profileImage")
+		.populate("assignedHR", "name email number phone profileImage")
+		.populate("assignedBy", "name email")
 		.sort({ createdAt: -1 });
 
 		return res.status(200).json({
