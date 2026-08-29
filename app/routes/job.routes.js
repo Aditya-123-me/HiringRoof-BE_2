@@ -37,4 +37,5 @@ module.exports = (router, io) => {
 	router.post("/job/bulkUpload", adminAuthorization,upload.single("excelSheet"), jobController.bulkUpload);
 	router.post("/job/singleUpload", adminAuthorization, jobController.singleUpload);
 	router.put("/job/edit/:jobId", authorization, jobController.editJobPost);
+	router.put("/job/request-immediate-tag/:jobId", authorization, jobController.requestImmediateTag);
 };

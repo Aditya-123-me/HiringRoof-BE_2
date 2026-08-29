@@ -63,4 +63,6 @@ module.exports = (router, io) => {
 	router.post("/user/badge-remove-request", authorization, userController.addBadgeRemoveRequest);
 	router.get("/user/my-badge-remove-requests", authorization, userController.getMyBadgeRemoveRequests);
 	router.get("/user/my-assigned-hrs", authorization, userController.getMyAssignedHRs);
+		// Public search route for Google Crawler indexing
+	router.get("/user/search-profile/:identifier/:value", userController.searchUserProfile);
 };

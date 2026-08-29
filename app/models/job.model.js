@@ -48,6 +48,10 @@ const jobSchema = mongoose.Schema(
 		merchantTransactionId: { type: String, default: "" },
 		expireDate: { type: String, default: "" },
 		isDeleted: { type: Boolean, default: false },
+		immediateTagActive: { type: Boolean, default: false },
+		immediateTagExpiresAt: { type: Date, default: null },
+		immediateTagRequest: { type: String, enum: ["NONE", "PENDING", "APPROVED", "REJECTED"], default: "NONE" },
+		immediateTagRequestedAt: { type: Date, default: null },
 	},
 	{ timestamps: true }
 );

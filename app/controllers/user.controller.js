@@ -1,4 +1,4 @@
-const User = require("../models/user.model");
+
 	 
 const jwt = require("jsonwebtoken");
 const extractSkillSub = require("../util/functions");
@@ -13,6 +13,7 @@ const jobModel = require("../models/job.model");
 const adminUserModel = require("../models/adminUser.model");
 const convertTo12HourFormat = require("../util/convertTo12HourFormat");
 const BadgeRemoveRequestModel = require("../models/BadgeRemoveRequest.model");
+const userModel = require("../models/user.model");
 
 const userController = {};
 
@@ -1150,6 +1151,60 @@ userController.getMyAssignedHRs = async (req, res) => {
     return res.status(500).json({ status: false, msg: error.message });
   }
 };
+userController.searchUserProfile = async (req, res) => {
+	try {
+		const { identifier, value } = req.params;
+		if (!identifier || !value) {
+			return res.status(400).json({ status: false, msg: "Identifier and search value are required" });
+		}
 
+		const validIdentifiers = ["usernameSlug", "email", "phone", "name"];
+		if (!validIdentifiers.includes(identifier)) {
+			return res.status(400).json({ status: false, msg: "A valid identifier is required (usernameSlug, email, phone, name)" });
+		}
+
+		// 1. Build query based on identifier type
+		let query = {};
+		if (identifier === "phone") {
+			const { normalizePhone } = require("../util/normalizeCandidateData");
+			query.phone = normalizePhone(value);
+		} else if (identifier === "name") {
+			query.name = { $regex: value, $options: "i" }; // Case-insensitive partial match
+		} else {
+			query[identifier] = value;
+		}
+
+		// 2. Find the user
+		const user = await User.findOne(query).lean();
+		if (!user) {
+			return res.status(404).json({ status: false, msg: "Profile not found" });
+		}
+
+		// 3. Sanitize profile to protect private data for public indexing
+		const sanitizedUser = {
+			_id: user._id,
+			name: user.name,
+			profession: user.profession,
+			skills: user.skills || [],
+			projects: user.projects || [],
+			education: user.education || [],
+			about: user.about,
+			profileImage: user.profileImage,
+			videoUrl: user.videoUrl,
+			userType: user.userType,
+			createdAt: user.createdAt,
+			profileComplete: user.profileComplete
+		};
+
+		return res.status(200).json({
+			status: true,
+			msg: "Public profile retrieved successfully",
+			data: sanitizedUser
+		});
+	} catch (error) {
+		console.error("Error in searchUserProfile:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
 
 module.exports = userController;

@@ -24,5 +24,7 @@ module.exports = (router, io) => {
 		// Super Admin All Conversations & Chat Audit APIs
 	router.get("/superAdmin/all-conversations", adminAuthorization, superAdmin.getAllConversations);
 	router.get("/superAdmin/conversation-messages/:roomId", adminAuthorization, superAdmin.getConversationMessages);
-
+	router.get("/superAdmin/pending-immediate-tags", adminAuthorization, superAdmin.getPendingImmediateTags);
+	router.put("/superAdmin/approve-immediate-tag/:jobId", adminAuthorization, superAdmin.approveImmediateTag);
+	router.put("/superAdmin/reject-immediate-tag/:jobId", adminAuthorization, superAdmin.rejectImmediateTag);
 };

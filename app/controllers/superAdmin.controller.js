@@ -882,4 +882,74 @@ superAdmin.getConversationMessages = async (req, res) => {
 	}
 };
 
+superAdmin.getPendingImmediateTags = async (req, res) => {
+	try {
+		const Job = require("../models/job.model");
+		const pendingJobs = await Job.find({
+			immediateTagRequest: "PENDING",
+			isDeleted: { $ne: true }
+		}).populate("userId", "name email phone companyName");
+
+		return res.status(200).json({
+			status: true,
+			msg: "Pending immediate tag requests fetched successfully",
+			data: pendingJobs
+		});
+	} catch (error) {
+		console.error("Error in getPendingImmediateTags:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+superAdmin.approveImmediateTag = async (req, res) => {
+	try {
+		const { jobId } = req.params;
+		const Job = require("../models/job.model");
+
+		const job = await Job.findById(jobId);
+		if (!job) {
+			return res.status(404).json({ status: false, msg: "Job not found" });
+		}
+
+		job.immediateTagActive = true;
+		job.immediateTagExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+		job.immediateTagRequest = "APPROVED";
+		await job.save();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Immediate tag request approved successfully!",
+			data: job
+		});
+	} catch (error) {
+		console.error("Error in approveImmediateTag:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+superAdmin.rejectImmediateTag = async (req, res) => {
+	try {
+		const { jobId } = req.params;
+		const Job = require("../models/job.model");
+
+		const job = await Job.findById(jobId);
+		if (!job) {
+			return res.status(404).json({ status: false, msg: "Job not found" });
+		}
+
+		job.immediateTagActive = false;
+		job.immediateTagRequest = "REJECTED";
+		await job.save();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Immediate tag request rejected.",
+			data: job
+		});
+	} catch (error) {
+		console.error("Error in rejectImmediateTag:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = superAdmin;

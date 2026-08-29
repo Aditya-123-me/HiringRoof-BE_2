@@ -60,6 +60,13 @@ jobController.post = async (req, res, io) => {
 		if (req.body.experience) bodyData.experience = req.body.experience;
 		if (req.body.availability) bodyData.availability = req.body.availability;
 		if (req.body.serviceType) bodyData.serviceType = req.body.serviceType;
+		if (req.body.availability === true || req.body.availability === "true" || req.body.serviceType === "Immediate") {
+			bodyData.immediateTagActive = true;
+			bodyData.immediateTagExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+		} else {
+			bodyData.immediateTagActive = false;
+			bodyData.immediateTagExpiresAt = null;
+		}
 		if (req.body.vacancies) bodyData.vacancies = req.body.vacancies;
 		if (req.body.companyName) {
 			let shortName = "";
@@ -933,7 +940,7 @@ jobController.createWithAddon = async (req, res, io) => {
 			} catch (e) {
 				bodyData.stream = Array.isArray(parsedJobData.stream) ? parsedJobData.stream : [parsedJobData.stream];
 			}
-		}
+		} 
 
 		if (!bodyData.stream || !Array.isArray(bodyData.stream) || bodyData.stream.length === 0) {
 			return res.status(400).json({
@@ -945,6 +952,13 @@ jobController.createWithAddon = async (req, res, io) => {
 		if (parsedJobData.experience) bodyData.experience = parsedJobData.experience;
 		if (parsedJobData.availability) bodyData.availability = parsedJobData.availability;
 		bodyData.serviceType = parsedJobData.serviceType;
+		if (parsedJobData.availability === true || parsedJobData.availability === "true" || parsedJobData.serviceType === "Immediate") {
+			bodyData.immediateTagActive = true;
+			bodyData.immediateTagExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+		} else {
+			bodyData.immediateTagActive = false;
+			bodyData.immediateTagExpiresAt = null;
+		}
 		if (parsedJobData.vacancies) bodyData.vacancies = parsedJobData.vacancies;
 
 		if (bodyData.companyName) {
@@ -1248,7 +1262,7 @@ jobController.editJobPost = async (req, res) => {
 		const allowedFields = [
 			"jobTittle", "jobType", "workType", "pay", "payType", 
 			"location", "companyName", "companyShortName", "experience", 
-			"vacancies", "note", "availability", "stream", "skills"
+			"vacancies", "note", "availability", "stream", "skills", "serviceType"
 		];
 
 		allowedFields.forEach(field => {
@@ -1256,6 +1270,15 @@ jobController.editJobPost = async (req, res) => {
 				updateData[field] = req.body[field];
 			}
 		});
+
+		if (
+			(req.body.availability === true || req.body.availability === "true" || req.body.serviceType === "Immediate") &&
+			(!job.immediateTagActive || !job.availability || job.serviceType !== "Immediate")
+		) {
+			updateData.immediateTagActive = true;
+			updateData.immediateTagExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+			updateData.immediateTagRequest = "NONE";
+		}
 
 		if (req.body.stream !== undefined) {
 			try {
@@ -1314,6 +1337,43 @@ jobController.getAllAvailableCategories = async(req,res)=>{
 		});
 	} catch (error) {
 		console.error("Error in getAllAvailableCategories:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+jobController.requestImmediateTag = async (req, res) => {
+	try {
+		const { jobId } = req.params;
+		if (!jobId) {
+			return res.status(400).json({ status: false, msg: "Job ID is required!" });
+		}
+
+		const job = await Job.findById(jobId);
+		if (!job) {
+			return res.status(404).json({ status: false, msg: "Job not found!" });
+		}
+
+		// Verify recruiter ownership
+		if (job.userId.toString() !== req.user._id.toString()) {
+			return res.status(403).json({ status: false, msg: "Unauthorized request!" });
+		}
+
+		// Availability check
+		if (!job.availability && job.serviceType !== "Immediate") {
+			return res.status(400).json({ status: false, msg: "This job is not marked for Immediate availability." });
+		}
+
+		job.immediateTagRequest = "PENDING";
+		job.immediateTagRequestedAt = new Date();
+		await job.save();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Immediate hiring tag reactivation requested successfully! Pending approval from Admin.",
+			data: job,
+		});
+	} catch (error) {
+		console.error("Error in requestImmediateTag:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };

@@ -31,6 +31,18 @@ const expireJobsAndServices = async () => {
 
 			console.log(`[expireJobsAndServices] Successfully expired ${expiredJobs.length} jobs and their services.`);
 		}
+
+		// Expire "Immediate Hiring" tags that are active and have past their expiration date/time
+		const now = new Date();
+		await jobModel.updateMany(
+			{
+				immediateTagActive: true,
+				immediateTagExpiresAt: { $ne: null, $exists: true, $lt: now }
+			},
+			{
+				$set: { immediateTagActive: false }
+			}
+		);
 	} catch (error) {
 		console.error("Error in expireJobsAndServices utility:", error);
 	}
