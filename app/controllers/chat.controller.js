@@ -252,4 +252,78 @@ chatController.markAsRead = async (req, res) => {
 	}
 };
 
+// Fetch unique recruiters assigned to the HR Admin (grouped with their assigned jobs and services)
+chatController.getAssignedRecruiters = async (req, res) => {
+	try {
+		const hrId = req.user._id;
+
+		const recruiterMap = new Map();
+
+		const getOrInitRecruiter = (userObj) => {
+			const idStr = userObj._id.toString();
+			if (!recruiterMap.has(idStr)) {
+				recruiterMap.set(idStr, {
+					recruiter: userObj,
+					jobs: new Map(),
+					services: new Map()
+				});
+			}
+			return recruiterMap.get(idStr);
+		};
+
+		// 1. Fetch recruiters from assigned services
+		const serviceModel = require("../models/service.model");
+		const assignedServices = await serviceModel.find({ assignedHR: hrId })
+			.populate("userId", "name email profileImage companyName userType phone");
+
+		assignedServices.forEach(service => {
+			if (service.userId && service.userId.userType !== "jobSeeker") {
+				const entry = getOrInitRecruiter(service.userId);
+				entry.services.set(service._id.toString(), service);
+			}
+		});
+
+		// 2. Fetch recruiters from assigned jobs
+		const adminUser = await adminUserModel.findById(hrId);
+		if (adminUser && adminUser.jobTarget) {
+			const jobIds = [];
+			adminUser.jobTarget.forEach(target => {
+				if (target.jobIds) {
+					target.jobIds.forEach(item => {
+						if (item.jobId) {
+							jobIds.push(item.jobId);
+						}
+					});
+				}
+			});
+
+			if (jobIds.length > 0) {
+				const assignedJobs = await jobModel.find({ _id: { $in: jobIds } })
+					.populate("userId", "name email profileImage companyName userType phone");
+
+				assignedJobs.forEach(job => {
+					if (job.userId && job.userId.userType !== "jobSeeker") {
+						const entry = getOrInitRecruiter(job.userId);
+						entry.jobs.set(job._id.toString(), job);
+					}
+				});
+			}
+		}
+
+		const result = Array.from(recruiterMap.values()).map(entry => ({
+			recruiter: entry.recruiter,
+			jobs: Array.from(entry.jobs.values()),
+			services: Array.from(entry.services.values())
+		}));
+
+		return res.status(200).json({
+			status: true,
+			data: result,
+		});
+	} catch (error) {
+		console.error("Error fetching assigned recruiters:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = chatController;
