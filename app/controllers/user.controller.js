@@ -1175,14 +1175,17 @@ userController.searchUserProfile = async (req, res) => {
 			query[identifier] = value;
 		}
 
-		// 2. Find the user
-		const user = await User.findOne(query).lean();
-		if (!user) {
-			return res.status(404).json({ status: false, msg: "Profile not found" });
+		// Only show active and non-deleted profiles
+		query.isDeleted = { $ne: true };
+
+		// 2. Find the users
+		const users = await User.find(query).limit(30).lean();
+		if (!users || users.length === 0) {
+			return res.status(404).json({ status: false, msg: "No matching profiles found" });
 		}
 
-		// 3. Sanitize profile to protect private data for public indexing
-		const sanitizedUser = {
+		// 3. Sanitize profiles to protect private data for public indexing
+		const sanitizedUsers = users.map(user => ({
 			_id: user._id,
 			name: user.name,
 			profession: user.profession,
@@ -1194,13 +1197,19 @@ userController.searchUserProfile = async (req, res) => {
 			videoUrl: user.videoUrl,
 			userType: user.userType,
 			createdAt: user.createdAt,
-			profileComplete: user.profileComplete
-		};
+			profileComplete: user.profileComplete,
+			location: user.location,
+			experience: user.experience,
+			currentPay: user.currentPay,
+			expectationPay: user.expectationPay,
+			selectedBadge: user.selectedBadge,
+			isHired: user.isHired
+		}));
 
 		return res.status(200).json({
 			status: true,
-			msg: "Public profile retrieved successfully",
-			data: sanitizedUser
+			msg: "Matching profiles retrieved successfully",
+			data: sanitizedUsers
 		});
 	} catch (error) {
 		console.error("Error in searchUserProfile:", error);
