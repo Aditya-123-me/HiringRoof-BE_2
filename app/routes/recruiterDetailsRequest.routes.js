@@ -9,17 +9,6 @@ module.exports = (router) => {
 	router.get("/recruiter-request/status/:recruiterId", adminAuthorization, controller.status);
 
 	// Super Admin Endpoints
-	router.get("/superAdmin/recruiter-requests", adminAuthorization, (req, res, next) => {
-		if (req.user.type !== "admin") {
-			return res.status(403).json({ status: false, msg: "Access denied. Super Admin only." });
-		}
-		next();
-	}, controller.allRequests);
-
-	router.put("/superAdmin/recruiter-request/verify/:id", adminAuthorization, (req, res, next) => {
-		if (req.user.type !== "admin") {
-			return res.status(403).json({ status: false, msg: "Access denied. Super Admin only." });
-		}
-		next();
-	}, controller.verifyRequest);
+	router.get("/superAdmin/recruiter-requests", adminAuthorization, controller.allRequests);
+	router.put("/superAdmin/recruiter-request/verify/:id", adminAuthorization, controller.verifyRequest);
 };
