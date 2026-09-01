@@ -19,70 +19,29 @@ chatController.getOrCreateRoom = async (req, res) => {
 		const targetUserId = userId || recruiterId || (isHR ? null : req.user._id.toString());
 
 		// ----------------------------------------------------
-		// A. SERVICE CONVERSATION FLOW
+		// A. RESOLVE RECRUITER & HR IDS
 		// ----------------------------------------------------
+		let finalUserId = targetUserId;
+		let finalHrId = hrId;
+
 		if (serviceId) {
 			const serviceModel = require("../models/service.model");
 			const service = await serviceModel.findById(serviceId).populate("userId").populate("assignedHR");
-			
-			if (!service) {
-				return res.status(404).json({ status: false, msg: "Service order not found!" });
+			if (service) {
+				if (!finalUserId) finalUserId = service.userId?._id?.toString() || service.userId?.toString();
+				if (!finalHrId) finalHrId = service.assignedHR?._id?.toString() || service.assignedHR?.toString();
 			}
-
-			const finalUserId = targetUserId || service.userId?._id?.toString() || service.userId?.toString();
-			const finalHrId = hrId || service.assignedHR?._id?.toString() || service.assignedHR?.toString();
-
-			if (!finalHrId) {
-				return res.status(400).json({ status: false, msg: "HR is not yet assigned for this service!" });
-			}
-
-			const roomId = `hr_${finalHrId}_user_${finalUserId}_service_${serviceId}`;
-
-			let conversation = await conversationModel.findOne({ roomId })
-				.populate("hrId", "name email number profileImage")
-				.populate("userId", "name email profileImage companyName userType phone")
-				.populate("serviceId");
-
-			if (!conversation) {
-				conversation = await conversationModel.create({
-					roomId,
-					conversationType: "service",
-					hrId: finalHrId,
-					userId: finalUserId,
-					recruiterId: finalUserId,
-					serviceId: service._id,
-					lastMessage: "Service conversation started",
-					lastMessageAt: new Date(),
-				});
-
-				conversation = await conversationModel.findById(conversation._id)
-					.populate("hrId", "name email number profileImage")
-					.populate("userId", "name email profileImage companyName userType phone")
-					.populate("serviceId");
-			}
-
-			return res.status(200).json({
-				status: true,
-				data: conversation,
-				roomId,
-			});
 		}
 
-		// ----------------------------------------------------
-		// B. JOB CONVERSATION FLOW
-		// ----------------------------------------------------
-		if (!jobId) {
-			return res.status(400).json({ status: false, msg: "jobId or serviceId is required!" });
+		if (jobId) {
+			const job = await jobModel.findById(jobId).select("userId assignedHR");
+			if (job) {
+				if (!finalUserId && job.userId) finalUserId = job.userId.toString();
+				if (!finalHrId && job.assignedHR) finalHrId = job.assignedHR.toString();
+			}
 		}
 
-		let finalRecruiterId = targetUserId;
-		if (!finalRecruiterId) {
-			const job = await jobModel.findById(jobId).select("userId");
-			if (job && job.userId) finalRecruiterId = job.userId.toString();
-		}
-
-		let finalHrId = hrId;
-		if (!finalHrId) {
+		if (!finalHrId && jobId) {
 			const assignedAdmin = await adminUserModel.findOne({
 				"jobTarget.jobIds.jobId": jobId,
 				isDeleted: { $ne: true }
@@ -90,36 +49,77 @@ chatController.getOrCreateRoom = async (req, res) => {
 			if (assignedAdmin) finalHrId = assignedAdmin._id.toString();
 		}
 
-		if (!finalHrId || !finalRecruiterId) {
-			return res.status(400).json({ status: false, msg: "HR ID and Recruiter ID could not be resolved for this job!" });
+		if (!finalHrId || !finalUserId) {
+			return res.status(400).json({ status: false, msg: "HR ID and Recruiter ID could not be resolved!" });
 		}
 
-		const roomId = `hr_${finalHrId}_recruiter_${finalRecruiterId}_job_${jobId}`;
-
-		let conversation = await conversationModel.findOne({ roomId })
+		// ----------------------------------------------------
+		// B. SEARCH EXISTING CONVERSATION ROOM BETWEEN HR & RECRUITER
+		// ----------------------------------------------------
+		let conversation = await conversationModel.findOne({
+			hrId: finalHrId,
+			$or: [{ userId: finalUserId }, { recruiterId: finalUserId }]
+		})
+			.sort({ updatedAt: -1 })
 			.populate("hrId", "name email number profileImage")
 			.populate("recruiterId", "name email profileImage companyName")
-			.populate("userId", "name email profileImage companyName")
-			.populate("jobId", "jobTittle companyName companyLogo location");
+			.populate("userId", "name email profileImage companyName userType phone")
+			.populate("jobId", "jobTittle companyName companyLogo location")
+			.populate("serviceId");
 
-		if (!conversation) {
-			const newConv = await conversationModel.create({
-				roomId,
-				conversationType: "job",
-				hrId: finalHrId,
-				userId: finalRecruiterId,
-				recruiterId: finalRecruiterId,
-				jobId,
-				lastMessage: "Conversation started",
-				lastMessageAt: new Date(),
+		// If existing conversation found, update missing jobId / serviceId if applicable
+		if (conversation) {
+			let updated = false;
+			if (jobId && !conversation.jobId) {
+				conversation.jobId = jobId;
+				updated = true;
+			}
+			if (serviceId && !conversation.serviceId) {
+				conversation.serviceId = serviceId;
+				updated = true;
+			}
+			if (updated) {
+				await conversation.save();
+				conversation = await conversationModel.findById(conversation._id)
+					.populate("hrId", "name email number profileImage")
+					.populate("recruiterId", "name email profileImage companyName")
+					.populate("userId", "name email profileImage companyName userType phone")
+					.populate("jobId", "jobTittle companyName companyLogo location")
+					.populate("serviceId");
+			}
+
+			return res.status(200).json({
+				status: true,
+				data: conversation,
+				roomId: conversation.roomId,
 			});
-
-			conversation = await conversationModel.findById(newConv._id)
-				.populate("hrId", "name email number profileImage")
-				.populate("recruiterId", "name email profileImage companyName")
-				.populate("userId", "name email profileImage companyName")
-				.populate("jobId", "jobTittle companyName companyLogo location");
 		}
+
+		// ----------------------------------------------------
+		// C. CREATE NEW CONVERSATION ROOM IF NONE EXISTS
+		// ----------------------------------------------------
+		const roomId = jobId
+			? `hr_${finalHrId}_recruiter_${finalUserId}_job_${jobId}`
+			: `hr_${finalHrId}_user_${finalUserId}_service_${serviceId || Date.now()}`;
+
+		const newConv = await conversationModel.create({
+			roomId,
+			conversationType: serviceId ? "service" : "job",
+			hrId: finalHrId,
+			userId: finalUserId,
+			recruiterId: finalUserId,
+			jobId: jobId || null,
+			serviceId: serviceId || null,
+			lastMessage: "Conversation started",
+			lastMessageAt: new Date(),
+		});
+
+		conversation = await conversationModel.findById(newConv._id)
+			.populate("hrId", "name email number profileImage")
+			.populate("recruiterId", "name email profileImage companyName")
+			.populate("userId", "name email profileImage companyName userType phone")
+			.populate("jobId", "jobTittle companyName companyLogo location")
+			.populate("serviceId");
 
 		return res.status(200).json({
 			status: true,
