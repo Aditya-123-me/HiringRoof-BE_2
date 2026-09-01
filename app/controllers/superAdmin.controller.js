@@ -729,6 +729,39 @@ superAdmin.assignServiceHR = async (req, res, io) => {
 		service.paymentStatus = "APPROVED";
 		await service.save();
 
+		// 1b. Update matching Job record in jobModel so recruiter profile sees assigned HR
+		try {
+			if (service.jobId) {
+				await jobModel.findByIdAndUpdate(service.jobId, { assignedHR: hrId });
+			} else {
+				const sType = service.serviceType || service.serviceData?.title || service.addonId?.name || "";
+				if (sType) {
+					const cleanType = sType.replace(/hiring/i, "").trim();
+					const regex = new RegExp(cleanType, "i");
+					await jobModel.updateMany(
+						{
+							userId: service.userId._id,
+							$or: [
+								{ serviceType: regex },
+								{ "addOn.name": regex },
+								{ "addOn.title": regex }
+							],
+							isDeleted: { $ne: true }
+						},
+						{ $set: { assignedHR: hrId } }
+					);
+				} else {
+					// Fallback: update latest active addon job for this user
+					await jobModel.updateMany(
+						{ userId: service.userId._id, isDeleted: { $ne: true } },
+						{ $set: { assignedHR: hrId } }
+					);
+				}
+			}
+		} catch (jobUpdateErr) {
+			console.log("Error updating job assignedHR:", jobUpdateErr.message);
+		}
+
 		// 2. Initialize / Get Conversation Room
 		const roomId = `hr_${hrId}_user_${service.userId._id}_service_${serviceId}`;
 
@@ -948,6 +981,260 @@ superAdmin.rejectImmediateTag = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error in rejectImmediateTag:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+superAdmin.getCompleteAnalytics = async (req, res) => {
+	try {
+		const serviceModel = require("../models/service.model");
+		const addonModel = require("../models/addon.model");
+		const paymentModel = require("../models/payment.model");
+
+		let { search = "", status = "all", serviceType = "all", page = 1, limit = 50 } = req.query;
+		page = parseInt(page) || 1;
+		limit = parseInt(limit) || 50;
+
+		// 1. Fetch All Active & Non-deleted Jobs with populated recruiter (userId) and assignedHR
+		const jobQuery = { isDeleted: { $ne: true } };
+		if (status === "active") jobQuery.isActive = true;
+		else if (status === "expired") jobQuery.isActive = false;
+
+		if (serviceType && serviceType !== "all") {
+			jobQuery.serviceType = serviceType;
+		}
+
+		if (search && search.trim().length > 0) {
+			const searchRegex = new RegExp(search.trim(), "i");
+			jobQuery.$or = [
+				{ jobTittle: searchRegex },
+				{ companyName: searchRegex },
+				{ companyShortName: searchRegex },
+				{ location: searchRegex },
+				{ serviceType: searchRegex }
+			];
+		}
+
+		const totalJobsCount = await jobModel.countDocuments(jobQuery);
+		const jobsData = await jobModel.find(jobQuery)
+			.sort({ createdAt: -1 })
+			.skip((page - 1) * limit)
+			.limit(limit)
+			.populate({ path: "userId", select: "name email phone userType companyName companyLogo" })
+			.populate({ path: "assignedHR", select: "name email number phone profileImage" })
+			.lean();
+
+		// 2. Fetch Job Applications for these jobs
+		const jobIds = jobsData.map((j) => j._id);
+
+		// Fetch all applications across these jobs
+		const allApplications = await JobApplication.find({ jobId: { $in: jobIds } })
+			.populate({ path: "userId", select: "name email phone userType profileImage experience skills resume" })
+			.sort({ createdAt: -1 })
+			.lean();
+
+		// Group applications by jobId
+		const applicationsByJob = {};
+		let totalAppliedCount = 0;
+		let totalShortlistedCount = 0;
+		let totalInterviewingCount = 0;
+		let totalSelectedCount = 0;
+		let totalRejectedCount = 0;
+		let totalOfferedCount = 0;
+
+		allApplications.forEach((app) => {
+			const jId = app.jobId ? app.jobId.toString() : null;
+			if (!jId) return;
+
+			if (!applicationsByJob[jId]) {
+				applicationsByJob[jId] = {
+					total: 0,
+					applied: 0,
+					shortlisted: 0,
+					interviewing: 0,
+					selected: 0,
+					rejected: 0,
+					offered: 0,
+					list: []
+				};
+			}
+
+			const currentStage = String(app.status || app.stage || "applied").toLowerCase();
+			applicationsByJob[jId].total += 1;
+			applicationsByJob[jId].list.push(app);
+
+			if (currentStage.includes("short")) {
+				applicationsByJob[jId].shortlisted += 1;
+				totalShortlistedCount += 1;
+			} else if (currentStage.includes("interview")) {
+				applicationsByJob[jId].interviewing += 1;
+				totalInterviewingCount += 1;
+			} else if (currentStage.includes("select")) {
+				applicationsByJob[jId].selected += 1;
+				totalSelectedCount += 1;
+			} else if (currentStage.includes("reject")) {
+				applicationsByJob[jId].rejected += 1;
+				totalRejectedCount += 1;
+			} else if (currentStage.includes("offer")) {
+				applicationsByJob[jId].offered += 1;
+				totalOfferedCount += 1;
+			} else {
+				applicationsByJob[jId].applied += 1;
+				totalAppliedCount += 1;
+			}
+		});
+
+		// 3. Fetch Service / Addon Orders
+		const serviceOrders = await serviceModel.find({})
+			.populate({ path: "userId", select: "name email phone" })
+			.populate({ path: "assignedHR", select: "name email" })
+			.lean();
+
+		// Calculate Revenue Breakdown
+		let totalRevenue = 0;
+		const serviceTypeStats = {
+			Urgent: { count: 0, revenue: 0 },
+			Immediate: { count: 0, revenue: 0 },
+			Premium: { count: 0, revenue: 0 },
+			"Contact Deal": { count: 0, revenue: 0 }
+		};
+
+		serviceOrders.forEach((so) => {
+			const amt = Number(so.totalAmount || so.serviceData?.amount || 0);
+			totalRevenue += amt;
+			const typeName = so.serviceData?.title || so.addonId?.name || so.serviceType;
+			if (typeName) {
+				Object.keys(serviceTypeStats).forEach((key) => {
+					if (typeName.toLowerCase().includes(key.toLowerCase())) {
+						serviceTypeStats[key].count += 1;
+						serviceTypeStats[key].revenue += amt;
+					}
+				});
+			}
+		});
+
+		// 4. Fetch Users Count Summary
+		const totalRecruitersCount = await User.countDocuments({ userType: "recruiter" });
+		const totalCandidatesCount = await User.countDocuments({ userType: { $in: ["jobSeeker", "user"] } });
+		const totalHRsCount = await adminUserModel.countDocuments({ type: "hr" });
+
+		// 5. Build Formatted Jobs Payload
+		const formattedJobs = jobsData.map((job) => {
+			const jIdStr = job._id.toString();
+			const appStats = applicationsByJob[jIdStr] || {
+				total: 0,
+				applied: 0,
+				shortlisted: 0,
+				interviewing: 0,
+				selected: 0,
+				rejected: 0,
+				offered: 0,
+				list: []
+			};
+
+			return {
+				jobId: job._id,
+				jobTitle: job.jobTittle,
+				companyName: job.companyName || job.companyShortName,
+				companyShortName: job.companyShortName,
+				companyLogo: job.companyLogo,
+				location: job.location,
+				jobType: job.jobType,
+				workType: job.workType,
+				pay: job.pay,
+				payType: job.payType,
+				vacancies: job.vacancies || 0,
+				experience: job.experience,
+				serviceType: job.serviceType || "Standard",
+				isActive: job.isActive,
+				isPaymentSuccess: job.isPaymentSuccess || false,
+				expireDate: job.expireDate || null,
+				createdAt: job.createdAt,
+
+				// Recruiter Details
+				recruiterDetails: job.userId ? {
+					id: job.userId._id,
+					name: job.userId.name,
+					email: job.userId.email,
+					phone: job.userId.phone,
+					companyName: job.userId.companyName || job.companyName,
+					companyLogo: job.userId.companyLogo || job.companyLogo,
+					userType: job.userId.userType
+				} : null,
+
+				// Assigned HR Details
+				assignedHRDetails: job.assignedHR ? {
+					id: job.assignedHR._id,
+					name: job.assignedHR.name,
+					email: job.assignedHR.email,
+					number: job.assignedHR.number || job.assignedHR.phone,
+					profileImage: job.assignedHR.profileImage
+				} : null,
+
+				// Candidates & Stages Analytics for this Job
+				applicationsSummary: {
+					totalCandidates: appStats.total,
+					appliedCount: appStats.applied,
+					shortlistedCount: appStats.shortlisted,
+					interviewingCount: appStats.interviewing,
+					selectedCount: appStats.selected,
+					rejectedCount: appStats.rejected,
+					offeredCount: appStats.offered
+				},
+
+				// Detailed Candidates List
+				candidatesList: appStats.list.map((candidateApp) => ({
+					applicationId: candidateApp._id,
+					status: candidateApp.status || candidateApp.stage || "Applied",
+					createdAt: candidateApp.createdAt,
+					candidateDetails: candidateApp.userId ? {
+						id: candidateApp.userId._id,
+						name: candidateApp.userId.name,
+						email: candidateApp.userId.email,
+						phone: candidateApp.userId.phone,
+						profileImage: candidateApp.userId.profileImage,
+						skills: candidateApp.userId.skills || candidateApp.skills || [],
+						experience: candidateApp.userId.experience || candidateApp.experience,
+						resume: candidateApp.userId.resume || candidateApp.resume
+					} : null,
+					interviewDate: candidateApp.interviewDate || candidateApp.date || null,
+					interviewTime: candidateApp.interviewTime || candidateApp.time || null,
+					rejectionReason: candidateApp.rejectionReason || null
+				}))
+			};
+		});
+
+		return res.status(200).json({
+			status: true,
+			msg: "Complete Analytics Fetched Successfully",
+			summary: {
+				totalJobs: totalJobsCount,
+				totalRecruiters: totalRecruitersCount,
+				totalCandidates: totalCandidatesCount,
+				totalHRs: totalHRsCount,
+				totalApplications: allApplications.length,
+				totalServiceOrders: serviceOrders.length,
+				totalRevenue: totalRevenue,
+				stagesBreakdown: {
+					applied: totalAppliedCount,
+					shortlisted: totalShortlistedCount,
+					interviewing: totalInterviewingCount,
+					selected: totalSelectedCount,
+					rejected: totalRejectedCount,
+					offered: totalOfferedCount
+				},
+				serviceTypeBreakdown: serviceTypeStats
+			},
+			pagination: {
+				page,
+				limit,
+				totalJobs: totalJobsCount,
+				totalPages: Math.ceil(totalJobsCount / limit)
+			},
+			jobs: formattedJobs
+		});
+	} catch (error) {
+		console.error("Error in getCompleteAnalytics:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };

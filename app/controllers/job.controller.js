@@ -548,10 +548,17 @@ jobController.myJobs = async (req, res) => {
 			.lean();
 		const jobCount = await Job.countDocuments({ userId: req.user._id, isDeleted: { $ne: true } });
 
+		const serviceModel = require("../models/service.model");
+
 		const hrAdmins = await adminUserModel.find({
 			isDeleted: { $ne: true },
 			type: { $in: ["hr", "admin", "sub-admin"] }
 		}).select("_id name email number profileImage jobTarget").lean();
+
+		const activeServices = await serviceModel.find({
+			userId: req.user._id,
+			assignedHR: { $exists: true, $ne: null }
+		}).lean();
 
 		const jobs = [];
 
@@ -565,14 +572,39 @@ jobController.myJobs = async (req, res) => {
 				hired = await jobApplicationModel.countDocuments({ jobId: e._id, selectedCandidates: true });
 				rejected = await jobApplicationModel.countDocuments({ jobId: e._id, selectedCandidates: false });
 
-				const assignedHR = hrAdmins.find(hr => 
-					hr.jobTarget && Array.isArray(hr.jobTarget) && hr.jobTarget.some(target => 
-						target.jobIds && Array.isArray(target.jobIds) && target.jobIds.some(j => {
-							const jId = j?.jobId?._id ? j.jobId._id.toString() : j?.jobId ? j.jobId.toString() : null;
-							return jId && jId === e._id.toString();
-						})
-					)
-				);
+				// 1. Direct assignedHR on job
+				let assignedHR = null;
+				if (e.assignedHR) {
+					assignedHR = hrAdmins.find(hr => hr._id.toString() === e.assignedHR.toString());
+				}
+
+				// 2. Check hr.jobTarget
+				if (!assignedHR) {
+					assignedHR = hrAdmins.find(hr => 
+						hr.jobTarget && Array.isArray(hr.jobTarget) && hr.jobTarget.some(target => 
+							target.jobIds && Array.isArray(target.jobIds) && target.jobIds.some(j => {
+								const jId = j?.jobId?._id ? j.jobId._id.toString() : j?.jobId ? j.jobId.toString() : null;
+								return jId && jId === e._id.toString();
+							})
+						)
+					);
+				}
+
+				// 3. Check serviceModel for assigned HR matching service
+				if (!assignedHR && (e.serviceType || e.addOn)) {
+					const matchedService = activeServices.find(s => {
+						const sTitle = (s.serviceType || s.serviceData?.title || "").toLowerCase();
+						const jTitle = (e.serviceType || e.addOn?.name || e.addOn?.title || "").toLowerCase();
+						return (
+							(s.jobId && s.jobId.toString() === e._id.toString()) ||
+							(sTitle && jTitle && (sTitle.includes(jTitle) || jTitle.includes(sTitle)))
+						);
+					});
+
+					if (matchedService && matchedService.assignedHR) {
+						assignedHR = hrAdmins.find(hr => hr._id.toString() === matchedService.assignedHR.toString());
+					}
+				}
 
 				jobs[index] = {
 					...e,

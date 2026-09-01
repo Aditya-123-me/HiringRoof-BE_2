@@ -27,4 +27,8 @@ module.exports = (router, io) => {
 	router.get("/superAdmin/pending-immediate-tags", adminAuthorization, superAdmin.getPendingImmediateTags);
 	router.put("/superAdmin/approve-immediate-tag/:jobId", adminAuthorization, superAdmin.approveImmediateTag);
 	router.put("/superAdmin/reject-immediate-tag/:jobId", adminAuthorization, superAdmin.rejectImmediateTag);
+
+	// Super Admin Complete Analytics API
+	router.get("/superAdmin/getCompleteAnalytics", adminAuthorization, superAdmin.getCompleteAnalytics);
+	router.get("/superAdmin/complete-analytics", adminAuthorization, superAdmin.getCompleteAnalytics);
 };

@@ -71,15 +71,18 @@ service.myServices = async (req, res) => {
 
 		await Promise.all(
 			dataAll.map(async (item) => {
-				let isActive = null;
+				let isActive = true;
 
-				if (item.date < today) isActive = false;
-				else {
-					if (today === item.date) isActive = true;
-					else if (item.expireDate < today) isActive = false;
+				if (item.expireDate && item.expireDate < today) {
+					isActive = false;
+				} else if (item.date && item.date > today) {
+					isActive = null;
+				} else {
+					isActive = true;
 				}
 
-				await serviceModel.findByIdAndUpdate(item._id, { isActive: isActive }, { new: true });
+				item.isActive = isActive;
+				await serviceModel.findByIdAndUpdate(item._id, { isActive: isActive });
 			})
 		);
 
