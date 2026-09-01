@@ -62,6 +62,11 @@ service.myServices = async (req, res) => {
 
 		let data = null;
 		let dataCount = 0;
+		const conversationModel = require("../models/conversation.model");
+		const adminUserModel = require("../models/adminUser.model");
+
+		const defaultHR = await adminUserModel.findOne({ type: { $in: ["hr", "admin", "sub-admin"] }, isDeleted: { $ne: true } }).select("name email number phone profileImage").lean();
+
 		const dataAll = await serviceModel.find({ userId })
 			.sort({ createdAt: -1 })
 			.populate({ path: "userId", select: "name phone email profileImage userType" })
@@ -81,6 +86,22 @@ service.myServices = async (req, res) => {
 					isActive = true;
 				}
 
+				// If assignedHR is missing, try to resolve from conversationModel or default HR Admin
+				if (!item.assignedHR) {
+					const activeConv = await conversationModel.findOne({
+						$or: [{ userId: userId }, { recruiterId: userId }],
+						hrId: { $exists: true, $ne: null }
+					}).sort({ updatedAt: -1 }).populate("hrId", "name email number phone profileImage");
+
+					if (activeConv && activeConv.hrId) {
+						item.assignedHR = activeConv.hrId;
+						await serviceModel.findByIdAndUpdate(item._id, { assignedHR: activeConv.hrId._id, fulfillmentStatus: "ASSIGNED" }).catch(() => {});
+					} else if (defaultHR) {
+						item.assignedHR = defaultHR;
+						await serviceModel.findByIdAndUpdate(item._id, { assignedHR: defaultHR._id, fulfillmentStatus: "ASSIGNED" }).catch(() => {});
+					}
+				}
+
 				item.isActive = isActive;
 				await serviceModel.findByIdAndUpdate(item._id, { isActive: isActive });
 			})
@@ -90,29 +111,17 @@ service.myServices = async (req, res) => {
 			data = dataAll; 
 			dataCount = dataCountAll;
 		} else if (status === "active") {
-			data = await serviceModel.find({ userId, isActive: true })
-				.sort({ createdAt: -1 })
-				.populate({ path: "userId", select: "name phone email profileImage userType" })
-				.populate({ path: "assignedHR", select: "name email number phone profileImage" })
-				.populate("addonId");
-			dataCount = await serviceModel.countDocuments({ userId, isActive: true });
+			data = dataAll.filter(item => item.isActive === true);
+			dataCount = data.length;
 		} else if (status === "expired") {
-			data = await serviceModel.find({ userId, isActive: false })
-				.sort({ createdAt: -1 })
-				.populate({ path: "userId", select: "name phone email profileImage userType" })
-				.populate({ path: "assignedHR", select: "name email number phone profileImage" })
-				.populate("addonId");
-			dataCount = await serviceModel.countDocuments({ userId, isActive: false });
+			data = dataAll.filter(item => item.isActive === false);
+			dataCount = data.length;
 		} else if (status === "upcoming") {
-			data = await serviceModel.find({ userId, isActive: null })
-				.sort({ createdAt: -1 })
-				.populate({ path: "userId", select: "name phone email profileImage userType" })
-				.populate({ path: "assignedHR", select: "name email number phone profileImage" })
-				.populate("addonId");
-			dataCount = await serviceModel.countDocuments({ userId, isActive: null });
+			data = dataAll.filter(item => item.isActive === null);
+			dataCount = data.length;
 		}
 
-		return res.status(200).send({ status: true, msg: `My Services !!`, dataCount, data: [...data] });
+		return res.status(200).send({ status: true, msg: `My Services !!`, dataCount, data });
 	} catch (error) {
 		console.log(error);
 		return res.status(500).send({ status: false, msg: error.message, data: [] });
