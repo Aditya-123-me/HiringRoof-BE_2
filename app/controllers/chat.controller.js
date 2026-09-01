@@ -54,31 +54,42 @@ chatController.getOrCreateRoom = async (req, res) => {
 		}
 
 		// ----------------------------------------------------
-		// B. SEARCH EXISTING CONVERSATION ROOM BETWEEN HR & RECRUITER
+		// B. SEARCH EXISTING CONVERSATION ROOM (SCOPED BY JOB / SERVICE)
 		// ----------------------------------------------------
-		let conversation = await conversationModel.findOne({
+		const queryFilter = {
 			hrId: finalHrId,
 			$or: [{ userId: finalUserId }, { recruiterId: finalUserId }]
-		})
-			.sort({ updatedAt: -1 })
+		};
+
+		if (jobId) {
+			queryFilter.jobId = jobId;
+		} else if (serviceId) {
+			queryFilter.serviceId = serviceId;
+		}
+
+		let conversation = await conversationModel.findOne(queryFilter)
 			.populate("hrId", "name email number profileImage")
 			.populate("recruiterId", "name email profileImage companyName")
 			.populate("userId", "name email profileImage companyName userType phone")
 			.populate("jobId", "jobTittle companyName companyLogo location")
 			.populate("serviceId");
 
-		// If existing conversation found, update missing jobId / serviceId if applicable
-		if (conversation) {
-			let updated = false;
-			if (jobId && !conversation.jobId) {
+		// Fallback: If jobId was passed but conversation was created via service without jobId, update & reuse
+		if (!conversation && jobId) {
+			conversation = await conversationModel.findOne({
+				hrId: finalHrId,
+				$or: [{ userId: finalUserId }, { recruiterId: finalUserId }],
+				$or: [{ jobId: null }, { jobId: { $exists: false } }]
+			})
+				.sort({ updatedAt: -1 })
+				.populate("hrId", "name email number profileImage")
+				.populate("recruiterId", "name email profileImage companyName")
+				.populate("userId", "name email profileImage companyName userType phone")
+				.populate("jobId", "jobTittle companyName companyLogo location")
+				.populate("serviceId");
+
+			if (conversation) {
 				conversation.jobId = jobId;
-				updated = true;
-			}
-			if (serviceId && !conversation.serviceId) {
-				conversation.serviceId = serviceId;
-				updated = true;
-			}
-			if (updated) {
 				await conversation.save();
 				conversation = await conversationModel.findById(conversation._id)
 					.populate("hrId", "name email number profileImage")
@@ -87,7 +98,9 @@ chatController.getOrCreateRoom = async (req, res) => {
 					.populate("jobId", "jobTittle companyName companyLogo location")
 					.populate("serviceId");
 			}
+		}
 
+		if (conversation) {
 			return res.status(200).json({
 				status: true,
 				data: conversation,
@@ -142,13 +155,46 @@ chatController.getConversations = async (req, res) => {
 			? { hrId: userId } 
 			: { $or: [{ userId }, { recruiterId: userId }] };
 
-		const conversations = await conversationModel.find(query)
+		const rawConversations = await conversationModel.find(query)
 			.populate("hrId", "name email number profileImage")
 			.populate("userId", "name email profileImage companyName userType phone")
 			.populate("recruiterId", "name email profileImage companyName")
 			.populate("jobId", "jobTittle companyName companyLogo location vacancies")
 			.populate("serviceId")
 			.sort({ lastMessageAt: -1 });
+
+		const conversations = await Promise.all(
+			rawConversations.map(async (convDoc) => {
+				const conv = convDoc.toObject();
+				if (!conv.jobId) {
+					const rId = conv.userId?._id || conv.recruiterId?._id || conv.userId || conv.recruiterId;
+					if (rId) {
+						const sType = conv.serviceId?.serviceType || conv.serviceId?.serviceData?.title || "";
+						let matchJob = null;
+						if (sType) {
+							const cleanType = sType.replace(/hiring/i, "").trim();
+							const regex = new RegExp(cleanType || "Immediate", "i");
+							matchJob = await jobModel.findOne({
+								userId: rId,
+								$or: [{ serviceType: regex }, { "addOn.name": regex }, { "addOn.title": regex }],
+								isDeleted: { $ne: true }
+							}).select("jobTittle companyName companyLogo location vacancies").lean();
+						}
+						if (!matchJob) {
+							matchJob = await jobModel.findOne({ userId: rId, isDeleted: { $ne: true } })
+								.sort({ createdAt: -1 })
+								.select("jobTittle companyName companyLogo location vacancies").lean();
+						}
+
+						if (matchJob) {
+							conv.jobId = matchJob;
+							await conversationModel.findByIdAndUpdate(conv._id, { jobId: matchJob._id }).catch(() => {});
+						}
+					}
+				}
+				return conv;
+			})
+		);
 
 		return res.status(200).json({
 			status: true,
