@@ -31,4 +31,9 @@ module.exports = (router, io) => {
 	// Super Admin Complete Analytics API
 	router.get("/superAdmin/getCompleteAnalytics", adminAuthorization, superAdmin.getCompleteAnalytics);
 	router.get("/superAdmin/complete-analytics", adminAuthorization, superAdmin.getCompleteAnalytics);
+
+	// Super Admin Candidate Analytics API (Supports Bar Graph Timeline & Pie Chart Stage Percentage)
+	router.post("/superAdmin/getCandidateAnalytics", adminAuthorization, superAdmin.getCandidateAnalytics);
+	router.get("/superAdmin/getCandidateAnalytics", adminAuthorization, superAdmin.getCandidateAnalytics);
+	router.get("/superAdmin/getCandidateAnalytics/:userId", adminAuthorization, superAdmin.getCandidateAnalytics);
 };

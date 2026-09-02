@@ -8,6 +8,7 @@ const JobApplication = require("../models/jobApplication.model");
 const User = require("../models/user.model");
 const createNotification = require("../util/createNotification");
 const getProfileImages = require("../util/getprofileImages");
+const userModel = require("../models/user.model");
 const { ObjectId } = require("mongoose").Types;
 
 const superAdmin = {};
@@ -1310,6 +1311,206 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error in getCompleteAnalytics:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+superAdmin.getCandidateAnalytics = async (req, res) => {
+	try {
+		const targetUserId = req.body?.userId || req.query?.userId || req.query?.candidateId || req.params?.userId;
+
+		let candidateDetails = null;
+		let query = {};
+
+		if (targetUserId) {
+			const candidateUser = await User.findById(targetUserId).select("-password").lean();
+			if (!candidateUser) {
+				return res.status(404).json({ status: false, msg: "Candidate not found for the provided ID" });
+			}
+
+			candidateDetails = {
+				id: candidateUser._id,
+				name: candidateUser.name,
+				email: candidateUser.email,
+				phone: candidateUser.phone,
+				userType: candidateUser.userType,
+				profileImage: candidateUser.profileImage || "",
+				skills: candidateUser.skills || [],
+				experience: candidateUser.experience || "",
+				resume: candidateUser.resume || "",
+				badge: candidateUser.badge || null,
+				createdAt: candidateUser.createdAt
+			};
+
+			query.applicantId = targetUserId;
+		}
+
+		// Fetch all matching job applications
+		const applications = await JobApplication.find(query)
+			.populate({
+				path: "jobId",
+				select: "jobTittle companyName companyShortName companyLogo location jobType workType pay serviceType isActive assignedHR userId",
+				populate: [
+					{ path: "userId", select: "name email phone companyName companyLogo" },
+					{ path: "assignedHR", select: "name email number phone profileImage" }
+				]
+			})
+			.populate({ path: "applicantId", select: "name email phone profileImage experience skills resume" })
+			.sort({ createdAt: 1 })
+			.lean();
+
+		// 1. Applications Timeline (Bar Graph Data: Date & Time grouping)
+		const timelineMap = {};
+		applications.forEach((app) => {
+			const createdDate = new Date(app.createdAt || Date.now());
+			const dateKey = createdDate.toISOString().split("T")[0]; // YYYY-MM-DD
+			const formattedDate = createdDate.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+			const monthKey = createdDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+
+			if (!timelineMap[dateKey]) {
+				timelineMap[dateKey] = {
+					date: dateKey,
+					formattedDate: formattedDate,
+					month: monthKey,
+					count: 0,
+					jobsApplied: []
+				};
+			}
+
+			timelineMap[dateKey].count += 1;
+			timelineMap[dateKey].jobsApplied.push({
+				applicationId: app._id,
+				jobId: app.jobId?._id,
+				jobTitle: app.jobId?.jobTittle || "Untitled Position",
+				companyName: app.jobId?.companyName || app.jobId?.companyShortName || "HiringRoof Client",
+				appliedTime: createdDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+				status: app.pipelineStatus || app.status || "Applied"
+			});
+		});
+
+		const barGraphData = Object.values(timelineMap).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+		// 2. Stages Breakdown & Percentage (Pie Chart Data)
+		const stagesCount = {
+			applied: 0,
+			shortlisted: 0,
+			interviewing: 0,
+			selected: 0,
+			rejected: 0,
+			offered: 0
+		};
+
+		applications.forEach((app) => {
+			const stageStr = String(app.pipelineStatus || app.status || app.stage || "applied").toLowerCase();
+			if (stageStr.includes("short")) stagesCount.shortlisted += 1;
+			else if (stageStr.includes("interview")) stagesCount.interviewing += 1;
+			else if (stageStr.includes("select")) stagesCount.selected += 1;
+			else if (stageStr.includes("reject")) stagesCount.rejected += 1;
+			else if (stageStr.includes("offer")) stagesCount.offered += 1;
+			else stagesCount.applied += 1;
+		});
+
+		const totalApps = applications.length;
+
+		const pieChartData = [
+			{
+				stage: "Applied",
+				count: stagesCount.applied,
+				percentage: totalApps > 0 ? Number(((stagesCount.applied / totalApps) * 100).toFixed(2)) : 0,
+				color: "#3b82f6"
+			},
+			{
+				stage: "Shortlisted",
+				count: stagesCount.shortlisted,
+				percentage: totalApps > 0 ? Number(((stagesCount.shortlisted / totalApps) * 100).toFixed(2)) : 0,
+				color: "#8b5cf6"
+			},
+			{
+				stage: "Interviewing",
+				count: stagesCount.interviewing,
+				percentage: totalApps > 0 ? Number(((stagesCount.interviewing / totalApps) * 100).toFixed(2)) : 0,
+				color: "#f97316"
+			},
+			{
+				stage: "Selected",
+				count: stagesCount.selected,
+				percentage: totalApps > 0 ? Number(((stagesCount.selected / totalApps) * 100).toFixed(2)) : 0,
+				color: "#22c55e"
+			},
+			{
+				stage: "Rejected",
+				count: stagesCount.rejected,
+				percentage: totalApps > 0 ? Number(((stagesCount.rejected / totalApps) * 100).toFixed(2)) : 0,
+				color: "#ef4444"
+			},
+			{
+				stage: "Offered",
+				count: stagesCount.offered,
+				percentage: totalApps > 0 ? Number(((stagesCount.offered / totalApps) * 100).toFixed(2)) : 0,
+				color: "#10b981"
+			}
+		];
+
+		// 3. Detailed Applied Jobs List
+		const applicationHistory = applications.map((app) => {
+			const createdDate = new Date(app.createdAt || Date.now());
+			return {
+				applicationId: app._id,
+				jobId: app.jobId?._id,
+				jobTitle: app.jobId?.jobTittle || "Untitled Position",
+				companyName: app.jobId?.companyName || app.jobId?.companyShortName || "HiringRoof Client",
+				companyLogo: app.jobId?.companyLogo || "",
+				location: app.jobId?.location || "Remote",
+				serviceType: app.jobId?.serviceType || "Standard",
+				appliedDate: createdDate.toISOString().split("T")[0],
+				appliedTime: createdDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+				appliedDateTimeFormatted: createdDate.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
+				stage: app.pipelineStatus || app.status || "Applied",
+				interviewDate: app.interviewsDate || null,
+				interviewTime: app.interviewsTime || null,
+				candidateDetails: app.applicantId ? {
+					id: app.applicantId._id,
+					name: app.applicantId.name,
+					email: app.applicantId.email,
+					phone: app.applicantId.phone,
+					profileImage: app.applicantId.profileImage
+				} : null,
+				recruiterDetails: app.jobId?.userId ? {
+					id: app.jobId.userId._id,
+					name: app.jobId.userId.name,
+					email: app.jobId.userId.email,
+					phone: app.jobId.userId.phone,
+					companyName: app.jobId.userId.companyName
+				} : null,
+				assignedHRDetails: app.jobId?.assignedHR ? {
+					id: app.jobId.assignedHR._id,
+					name: app.jobId.assignedHR.name,
+					email: app.jobId.assignedHR.email,
+					number: app.jobId.assignedHR.number || app.jobId.assignedHR.phone
+				} : null
+			};
+		});
+
+		return res.status(200).json({
+			status: true,
+			msg: "Candidate Analytics Fetched Successfully",
+			candidateDetails,
+			summary: {
+				totalJobsApplied: totalApps,
+				appliedCount: stagesCount.applied,
+				shortlistedCount: stagesCount.shortlisted,
+				interviewingCount: stagesCount.interviewing,
+				selectedCount: stagesCount.selected,
+				rejectedCount: stagesCount.rejected,
+				offeredCount: stagesCount.offered,
+				selectionRatePercentage: totalApps > 0 ? Number(((stagesCount.selected / totalApps) * 100).toFixed(2)) : 0,
+				shortlistRatePercentage: totalApps > 0 ? Number(((stagesCount.shortlisted / totalApps) * 100).toFixed(2)) : 0
+			},
+			barGraphData,
+			pieChartData,
+			applicationHistory
+		});
+	} catch (error) {
+		console.error("Error in getCandidateAnalytics:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };
