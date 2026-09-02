@@ -1029,7 +1029,7 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 
 		// Fetch all applications across these jobs
 		const allApplications = await JobApplication.find({ jobId: { $in: jobIds } })
-			.populate({ path: "userId", select: "name email phone userType profileImage experience skills resume" })
+			.populate({ path: "applicantId", select: "name email phone userType profileImage experience skills resume" })
 			.sort({ createdAt: -1 })
 			.lean();
 
@@ -1187,15 +1187,15 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 					applicationId: candidateApp._id,
 					status: candidateApp.status || candidateApp.stage || "Applied",
 					createdAt: candidateApp.createdAt,
-					candidateDetails: candidateApp.userId ? {
-						id: candidateApp.userId._id,
-						name: candidateApp.userId.name,
-						email: candidateApp.userId.email,
-						phone: candidateApp.userId.phone,
-						profileImage: candidateApp.userId.profileImage,
-						skills: candidateApp.userId.skills || candidateApp.skills || [],
-						experience: candidateApp.userId.experience || candidateApp.experience,
-						resume: candidateApp.userId.resume || candidateApp.resume
+					candidateDetails: candidateApp.applicantId ? {
+						id: candidateApp.applicantId._id,
+						name: candidateApp.applicantId.name,
+						email: candidateApp.applicantId.email,
+						phone: candidateApp.applicantId.phone,
+						profileImage: candidateApp.applicantId.profileImage,
+						skills: candidateApp.applicantId.skills || candidateApp.skills || [],
+						experience: candidateApp.applicantId.experience || candidateApp.experience,
+						resume: candidateApp.applicantId.resume || candidateApp.resume
 					} : null,
 					interviewDate: candidateApp.interviewDate || candidateApp.date || null,
 					interviewTime: candidateApp.interviewTime || candidateApp.time || null,

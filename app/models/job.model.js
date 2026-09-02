@@ -52,6 +52,7 @@ const jobSchema = mongoose.Schema(
 		immediateTagExpiresAt: { type: Date, default: null },
 		immediateTagRequest: { type: String, enum: ["NONE", "PENDING", "APPROVED", "REJECTED"], default: "NONE" },
 		immediateTagRequestedAt: { type: Date, default: null },
+		assignedHR: { type: mongoose.Schema.Types.ObjectId, ref: "adminUsers", default: null },
 	},
 	{ timestamps: true }
 );
