@@ -1084,14 +1084,59 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 			}
 		});
 
-		// 3. Fetch Service / Addon Orders
+		// 3. Fetch Service / Addon Orders & Build HR Assignment Lookup Map
 		const serviceOrders = await serviceModel.find({})
 			.populate({ path: "userId", select: "name email phone" })
-			.populate({ path: "assignedHR", select: "name email" })
+			.populate({ path: "assignedHR", select: "name email number phone profileImage" })
 			.lean();
 
+		// Build HR Assignment Lookup Map from adminUserModel and serviceModel
+		const hrJobMap = {};
+		const allHRAdmins = await adminUserModel.find({ type: { $in: ["hr", "admin"] } }).lean();
+
+		// A) Map from adminUser.jobTarget
+		allHRAdmins.forEach((hr) => {
+			if (Array.isArray(hr.jobTarget)) {
+				hr.jobTarget.forEach((jt) => {
+					if (Array.isArray(jt.jobIds)) {
+						jt.jobIds.forEach((item) => {
+							if (item && item.jobId) {
+								const jId = item.jobId.toString();
+								hrJobMap[jId] = {
+									id: hr._id,
+									name: hr.name,
+									email: hr.email,
+									number: hr.number || hr.phone || "",
+									profileImage: hr.profileImage || ""
+								};
+							}
+						});
+					}
+				});
+			}
+		});
+
+		// B) Map from serviceModel orders
+		serviceOrders.forEach((so) => {
+			const jId = so.jobId || so.serviceData?.jobId;
+			if (jId && so.assignedHR) {
+				const jIdStr = jId.toString();
+				if (!hrJobMap[jIdStr]) {
+					hrJobMap[jIdStr] = {
+						id: so.assignedHR._id || so.assignedHR,
+						name: so.assignedHR.name || "HR Admin",
+						email: so.assignedHR.email || "hr@hiringroof.com",
+						number: so.assignedHR.number || so.assignedHR.phone || "",
+						profileImage: so.assignedHR.profileImage || ""
+					};
+				}
+			}
+		});
+
+		const defaultHRAdmin = allHRAdmins.find((h) => h.email === "hr@hiringroof.com") || allHRAdmins[0];
+
 		// Calculate Revenue Breakdown
-		let totalRevenue = 0;
+		let totalAddonRevenue = 0;
 		const serviceTypeStats = {
 			Urgent: { count: 0, revenue: 0 },
 			Immediate: { count: 0, revenue: 0 },
@@ -1101,9 +1146,9 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 
 		serviceOrders.forEach((so) => {
 			const amt = Number(so.totalAmount || so.serviceData?.amount || 0);
-			totalRevenue += amt;
-			const typeName = so.serviceData?.title || so.addonId?.name || so.serviceType;
-			if (typeName) {
+			if (amt > 0) {
+				totalAddonRevenue += amt;
+				const typeName = so.serviceData?.title || so.addonId?.name || so.serviceType || so.serviceData?.name || "";
 				Object.keys(serviceTypeStats).forEach((key) => {
 					if (typeName.toLowerCase().includes(key.toLowerCase())) {
 						serviceTypeStats[key].count += 1;
@@ -1113,10 +1158,31 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 			}
 		});
 
-		// 4. Fetch Users Count Summary
-		const totalRecruitersCount = await User.countDocuments({ userType: "recruiter" });
+		const priceMap = { Urgent: 102, Immediate: 204, "Contact Deal": 306, Premium: 510 };
+		jobsData.forEach((j) => {
+			const sType = j.serviceType || j.addOn?.name || j.addOn?.title;
+			if (sType && sType !== "Standard" && priceMap[sType]) {
+				const price = Number(j.addOn?.price ? Math.round(j.addOn.price * 1.02) : priceMap[sType]);
+				const jIdStr = j._id.toString();
+				const existsInService = serviceOrders.some((so) => (so.jobId?.toString() === jIdStr || so.serviceData?.jobId?.toString() === jIdStr));
+				if (!existsInService) {
+					totalAddonRevenue += price;
+					Object.keys(serviceTypeStats).forEach((key) => {
+						if (sType.toLowerCase().includes(key.toLowerCase())) {
+							serviceTypeStats[key].count += 1;
+							serviceTypeStats[key].revenue += price;
+						}
+					});
+				}
+			}
+		});
+
+		// 4. Fetch Users Count Summary (including companyRecruiter and individualRecruiter)
+		const totalRecruitersCount = await User.countDocuments({
+			userType: { $in: ["companyRecruiter", "individualRecruiter", "recruiter", "company"] }
+		});
 		const totalCandidatesCount = await User.countDocuments({ userType: { $in: ["jobSeeker", "user"] } });
-		const totalHRsCount = await adminUserModel.countDocuments({ type: "hr" });
+		const totalHRsCount = await adminUserModel.countDocuments({ type: { $in: ["hr", "admin"] } });
 
 		// 5. Build Formatted Jobs Payload
 		const formattedJobs = jobsData.map((job) => {
@@ -1131,6 +1197,21 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 				offered: 0,
 				list: []
 			};
+
+			// Resolve assigned HR details
+			const resolvedHR = job.assignedHR ? {
+				id: job.assignedHR._id,
+				name: job.assignedHR.name,
+				email: job.assignedHR.email,
+				number: job.assignedHR.number || job.assignedHR.phone || "",
+				profileImage: job.assignedHR.profileImage || ""
+			} : (hrJobMap[jIdStr] || (defaultHRAdmin ? {
+				id: defaultHRAdmin._id,
+				name: defaultHRAdmin.name,
+				email: defaultHRAdmin.email,
+				number: defaultHRAdmin.number || defaultHRAdmin.phone || "",
+				profileImage: defaultHRAdmin.profileImage || ""
+			} : null));
 
 			return {
 				jobId: job._id,
@@ -1163,13 +1244,7 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 				} : null,
 
 				// Assigned HR Details
-				assignedHRDetails: job.assignedHR ? {
-					id: job.assignedHR._id,
-					name: job.assignedHR.name,
-					email: job.assignedHR.email,
-					number: job.assignedHR.number || job.assignedHR.phone,
-					profileImage: job.assignedHR.profileImage
-				} : null,
+				assignedHRDetails: resolvedHR,
 
 				// Candidates & Stages Analytics for this Job
 				applicationsSummary: {
@@ -1214,7 +1289,7 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 				totalHRs: totalHRsCount,
 				totalApplications: allApplications.length,
 				totalServiceOrders: serviceOrders.length,
-				totalRevenue: totalRevenue,
+				totalAddonRevenue: totalAddonRevenue,
 				stagesBreakdown: {
 					applied: totalAppliedCount,
 					shortlisted: totalShortlistedCount,
