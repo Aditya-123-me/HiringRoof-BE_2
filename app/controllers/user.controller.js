@@ -762,29 +762,15 @@ userController.update = async (req, res, io) => {
 				return res.status(400).json({ status: false, msg: `Please upload a video under 200MB !!`, user: {} });
 
 			try {
-				let videoUrl = "";
-
-				// Try uploading to cloud storage (Google Drive / Firebase)
-				try {
-					videoUrl = await imageUpload(video, `${req.user._id}_video`, "userVideo");
-				} catch (gErr) {
-					console.error("Cloud storage video upload error, using local fallback:", gErr);
-				}
-
-				// Fallback to local static storage if cloud upload returned empty or failed
-				if (!videoUrl) {
-					const destinationDirectory = path.join(__dirname, "../../uploads/userVideo/");
-					if (!fs.existsSync(destinationDirectory)) fs.mkdirSync(destinationDirectory, { recursive: true });
-					const ext = (video.originalname || "video.mp4").split(".").pop() || "mp4";
-					const fileName = `${req.user._id}_video_${Date.now()}.${ext}`;
-					const filePath = path.join(destinationDirectory, fileName);
-					fs.writeFileSync(filePath, video.buffer);
-					videoUrl = `uploads/userVideo/${fileName}`;
-				}
-
-				bodyData.videoUrl = videoUrl;
+				const destinationDirectory = path.join(__dirname, "../../uploads/userVideo/");
+				if (!fs.existsSync(destinationDirectory)) fs.mkdirSync(destinationDirectory, { recursive: true });
+				const ext = (video.originalname || "video.mp4").split(".").pop() || "mp4";
+				const fileName = `${req.user._id}_video_${Date.now()}.${ext}`;
+				const filePath = path.join(destinationDirectory, fileName);
+				fs.writeFileSync(filePath, video.buffer);
+				bodyData.videoUrl = `uploads/userVideo/${fileName}`;
 			} catch (vErr) {
-				console.error("Video processing error:", vErr);
+				console.error("Video upload processing error:", vErr);
 				return res.status(500).json({ status: false, msg: "Video processing error: " + vErr.message });
 			}
 		}
