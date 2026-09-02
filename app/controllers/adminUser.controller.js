@@ -685,13 +685,13 @@ adminUser.getJobHRdetails = async (req, res) => {
 		// Extract job IDs from the filtered job targets
 		const jobIds = filteredJobTargets.map((job) => job.jobId);
 
-		// Find jobs based on job IDs, serviceType filter, and in descending order of date
-		const jobsQuery = jobModel
-			.find({
-				_id: { $in: jobIds },
-				serviceType: serviceType, // Filter based on serviceType
-			})
-			.sort("-createdAt");
+		// Find jobs based on job IDs, optional serviceType filter, and in descending order of date
+		const query = { _id: { $in: jobIds } };
+		if (serviceType && serviceType.trim() !== "" && serviceType.toUpperCase() !== "ALL") {
+			query.serviceType = serviceType;
+		}
+
+		const jobsQuery = jobModel.find(query).sort("-createdAt");
 
 		// Apply pagination
 		const skip = (page - 1) * limit;
