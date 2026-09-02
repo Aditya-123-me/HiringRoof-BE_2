@@ -1278,4 +1278,80 @@ userController.getUserIntroVideos = async (req, res) => {
 	}
 };
 
+// ---------------------------------------------------
+// VIDEO STREAM PROXY ENDPOINT (HTTP Byte Range & Google Drive Stream)
+// ---------------------------------------------------
+userController.streamVideo = async (req, res) => {
+	try {
+		const { url, userId } = req.query;
+		let targetUrl = url;
+
+		if (!targetUrl && userId) {
+			const u = await userModel.findById(userId).select("videoUrl").lean();
+			targetUrl = u?.videoUrl;
+		}
+
+		if (!targetUrl) {
+			return res.status(404).send("Video URL not found");
+		}
+
+		// 1. Check if it's a Google Drive URL
+		if (targetUrl.includes("drive.google.com") || targetUrl.includes("lh3.googleusercontent.com")) {
+			try {
+				const { getVideoStream } = require("../util/googleDrive.util");
+				const streamData = await getVideoStream(targetUrl);
+				res.setHeader("Content-Type", "video/mp4");
+				res.setHeader("Accept-Ranges", "bytes");
+				return streamData.pipe(res);
+			} catch (gErr) {
+				console.error("Error streaming video from Google Drive:", gErr);
+				return res.redirect(targetUrl);
+			}
+		}
+
+		// 2. Check if it's a local file path (uploads/userVideo/... or ./uploads/...)
+		if (targetUrl.includes("uploads/")) {
+			const path = require("path");
+			const fs = require("fs");
+			const relativePath = targetUrl.substring(targetUrl.indexOf("uploads/"));
+			const absolutePath = path.join(__dirname, "../../", relativePath);
+
+			if (fs.existsSync(absolutePath)) {
+				const stat = fs.statSync(absolutePath);
+				const fileSize = stat.size;
+				const range = req.headers.range;
+
+				if (range) {
+					const parts = range.replace(/bytes=/, "").split("-");
+					const start = parseInt(parts[0], 10);
+					const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+					const chunksize = end - start + 1;
+					const file = fs.createReadStream(absolutePath, { start, end });
+					const head = {
+						"Content-Range": `bytes ${start}-${end}/${fileSize}`,
+						"Accept-Ranges": "bytes",
+						"Content-Length": chunksize,
+						"Content-Type": "video/mp4",
+					};
+					res.writeHead(206, head);
+					return file.pipe(res);
+				} else {
+					const head = {
+						"Content-Length": fileSize,
+						"Content-Type": "video/mp4",
+					};
+					res.writeHead(200, head);
+					return fs.createReadStream(absolutePath).pipe(res);
+				}
+			}
+		}
+
+		// 3. Direct HTTP(S) URL (Firebase, S3, external)
+		return res.redirect(targetUrl);
+	} catch (error) {
+		console.error("Error in streamVideo:", error);
+		return res.status(500).send("Video streaming error");
+	}
+};
+
 module.exports = userController;

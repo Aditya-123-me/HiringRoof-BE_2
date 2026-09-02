@@ -65,6 +65,9 @@ const imageUpload = async (imageData, name, folderName) => {
 		});
 
 		// Return direct download/view link
+		if (folderName === "userVideo" || imageData.mimetype?.startsWith("video/")) {
+			return `https://drive.google.com/uc?export=download&id=${fileId}`;
+		}
 		return `https://lh3.googleusercontent.com/d/${fileId}`;
 	} catch (error) {
 		console.error("Error uploading to Google Drive:", error);
@@ -111,4 +114,26 @@ const deleteFromFirebase = async (url) => {
 	}
 };
 
-module.exports = { imageUpload, deleteFromFirebase };
+/**
+ * Fetches raw video stream from Google Drive for HTML5 video playback
+ * @param {string} urlOrFileId Google Drive file ID or public URL
+ * @returns {Promise<stream.Readable>} Readable stream
+ */
+const getVideoStream = async (urlOrFileId) => {
+	let fileId = urlOrFileId;
+	if (urlOrFileId.includes("lh3.googleusercontent.com")) {
+		const parts = urlOrFileId.split("/");
+		fileId = parts[parts.length - 1];
+	} else if (urlOrFileId.includes("drive.google.com")) {
+		const match = urlOrFileId.match(/[?&]id=([^&#]+)/) || urlOrFileId.match(/\/d\/([^/]+)/);
+		fileId = match ? match[1] : urlOrFileId;
+	}
+
+	const response = await drive.files.get(
+		{ fileId: fileId, alt: "media" },
+		{ responseType: "stream" }
+	);
+	return response.data;
+};
+
+module.exports = { imageUpload, deleteFromFirebase, getVideoStream };

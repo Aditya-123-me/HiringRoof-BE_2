@@ -68,4 +68,5 @@ module.exports = (router, io) => {
 	
 	// User Intro Videos Route for Swiper / Reel Slider
 	router.get("/user/intro-videos", userController.getUserIntroVideos);
+	router.get("/user/video-stream", userController.streamVideo);
 };
