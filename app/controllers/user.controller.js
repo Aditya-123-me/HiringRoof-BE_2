@@ -1301,6 +1301,7 @@ userController.streamVideo = async (req, res) => {
 				const { getVideoStream } = require("../util/googleDrive.util");
 				const streamData = await getVideoStream(targetUrl);
 				res.setHeader("Content-Type", "video/mp4");
+				res.setHeader("Content-Disposition", "inline");
 				res.setHeader("Accept-Ranges", "bytes");
 				return streamData.pipe(res);
 			} catch (gErr) {
