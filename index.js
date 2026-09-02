@@ -31,8 +31,10 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(morgan("common"));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/videos", express.static(path.join(__dirname, "videos")));
 app.use("/api", router);
 
 const routesPath = path.join(__dirname, "app/routes");

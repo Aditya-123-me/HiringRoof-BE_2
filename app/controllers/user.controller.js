@@ -759,24 +759,33 @@ userController.update = async (req, res, io) => {
 		if (req.files && req.files["videoUrl"]) {
 			const video = req.files["videoUrl"][0];
 			if (video.size / 1024 / 1024 > 200)
-				return res.status(404).json({ status: false, msg: `Please upload under 200MB video !!`, user: {} });
+				return res.status(400).json({ status: false, msg: `Please upload a video under 200MB !!`, user: {} });
 
-			const { originalname, buffer } = video;
-			const destinationDirectory = "./videos/";
+			try {
+				let videoUrl = "";
 
-			if (!fs.existsSync(destinationDirectory)) fs.mkdirSync(destinationDirectory, { recursive: true });
-			const filePath = destinationDirectory + "video." + originalname.split(".").pop();
+				// Try uploading to cloud storage (Google Drive / Firebase)
+				try {
+					videoUrl = await imageUpload(video, `${req.user._id}_video`, "userVideo");
+				} catch (gErr) {
+					console.error("Cloud storage video upload error, using local fallback:", gErr);
+				}
 
-			fs.writeFileSync(filePath, buffer);
+				// Fallback to local static storage if cloud upload returned empty or failed
+				if (!videoUrl) {
+					const destinationDirectory = path.join(__dirname, "../../uploads/userVideo/");
+					if (!fs.existsSync(destinationDirectory)) fs.mkdirSync(destinationDirectory, { recursive: true });
+					const ext = (video.originalname || "video.mp4").split(".").pop() || "mp4";
+					const fileName = `${req.user._id}_video_${Date.now()}.${ext}`;
+					const filePath = path.join(destinationDirectory, fileName);
+					fs.writeFileSync(filePath, video.buffer);
+					videoUrl = `uploads/userVideo/${fileName}`;
+				}
 
-			const videoDuration = await getVideoDurationInSeconds(filePath);
-			if (videoDuration > 180)
-				return res.status(404).json({ status: false, msg: `Please upload a video under 3min !!`, user: {} });
-
-			if (video) {
-				const videoUrl = await imageUpload(video, `${req.user._id}_video`, "userVideo");
-				if (!videoUrl) return res.status(404).json({ status: false, msg: `Video upload failed, please try again !!` });
-				else bodyData.videoUrl = videoUrl;
+				bodyData.videoUrl = videoUrl;
+			} catch (vErr) {
+				console.error("Video processing error:", vErr);
+				return res.status(500).json({ status: false, msg: "Video processing error: " + vErr.message });
 			}
 		}
 
@@ -1159,9 +1168,9 @@ userController.searchUserProfile = async (req, res) => {
 			return res.status(400).json({ status: false, msg: "Identifier and search value are required" });
 		}
 
-		const validIdentifiers = ["usernameSlug", "email", "phone", "name"];
+		const validIdentifiers = ["usernameSlug", "email", "phone", "name", "id", "_id"];
 		if (!validIdentifiers.includes(identifier)) {
-			return res.status(400).json({ status: false, msg: "A valid identifier is required (usernameSlug, email, phone, name)" });
+			return res.status(400).json({ status: false, msg: "A valid identifier is required (usernameSlug, email, phone, name, id, _id)" });
 		}
 
 		// 1. Build query based on identifier type
@@ -1171,6 +1180,8 @@ userController.searchUserProfile = async (req, res) => {
 			query.phone = normalizePhone(value);
 		} else if (identifier === "name") {
 			query.name = { $regex: value, $options: "i" }; // Case-insensitive partial match
+		} else if (identifier === "id" || identifier === "_id") {
+			query._id = value;
 		} else {
 			query[identifier] = value;
 		}
