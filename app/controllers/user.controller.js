@@ -1217,4 +1217,54 @@ userController.searchUserProfile = async (req, res) => {
 	}
 };
 
+// ---------------------------------------------------
+// GET CANDIDATE INTRO VIDEOS (CANDIDATES ONLY)
+// ---------------------------------------------------
+userController.getUserIntroVideos = async (req, res) => {
+	try {
+		const { search = "", page = 1, limit = 50 } = req.query;
+
+		// Strictly candidates (jobSeeker) with non-empty videoUrl
+		const query = {
+			userType: "jobSeeker",
+			videoUrl: { $exists: true, $ne: "", $regex: /\S/ }
+		};
+
+		if (search && search.trim() !== "") {
+			const searchRegex = new RegExp(search.trim(), "i");
+			query.$or = [
+				{ name: searchRegex },
+				{ email: searchRegex },
+				{ phone: searchRegex },
+				{ profession: searchRegex },
+				{ location: searchRegex },
+				{ about: searchRegex },
+				{ skills: searchRegex }
+			];
+		}
+
+		const skip = (Number(page) - 1) * Number(limit);
+		const total = await userModel.countDocuments(query);
+		const users = await userModel
+			.find(query)
+			.select("name email phone profileImage userType profession videoUrl skills experience location about createdAt selectedBadge isHired")
+			.sort("-createdAt")
+			.skip(skip)
+			.limit(Number(limit))
+			.lean();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Candidate Intro Videos fetched successfully",
+			total,
+			page: Number(page),
+			pages: Math.ceil(total / Number(limit)) || 1,
+			data: users
+		});
+	} catch (error) {
+		console.error("Error in getUserIntroVideos:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = userController;

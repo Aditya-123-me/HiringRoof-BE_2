@@ -1515,4 +1515,66 @@ superAdmin.getCandidateAnalytics = async (req, res) => {
 	}
 };
 
+// ---------------------------------------------------
+// GET USER INTRO VIDEOS (FOR SWIPER / SLIDER & SEARCH)
+// ---------------------------------------------------
+superAdmin.getUserIntroVideos = async (req, res) => {
+	try {
+		const { search = "", userType = "all", page = 1, limit = 50 } = req.query;
+
+		// Base query: videoUrl must exist and be non-empty
+		const query = {
+			videoUrl: { $exists: true, $ne: "", $regex: /\S/ }
+		};
+
+		// Filter by userType if specified and not 'all'
+		if (userType && userType !== "all") {
+			if (userType === "jobSeeker") {
+				query.userType = "jobSeeker";
+			} else if (userType === "recruiter") {
+				query.userType = { $in: ["individualRecruiter", "companyRecruiter", "recruiter", "company"] };
+			} else {
+				query.userType = userType;
+			}
+		}
+
+		// Filter by search string across name, email, phone, profession, skills, location, about, companyName
+		if (search && search.trim() !== "") {
+			const searchRegex = new RegExp(search.trim(), "i");
+			query.$or = [
+				{ name: searchRegex },
+				{ email: searchRegex },
+				{ phone: searchRegex },
+				{ profession: searchRegex },
+				{ location: searchRegex },
+				{ about: searchRegex },
+				{ skills: searchRegex },
+				{ companyName: searchRegex }
+			];
+		}
+
+		const skip = (Number(page) - 1) * Number(limit);
+		const total = await userModel.countDocuments(query);
+		const users = await userModel
+			.find(query)
+			.select("name email phone profileImage userType profession videoUrl skills experience location about companyName createdAt selectedBadge isHired")
+			.sort("-createdAt")
+			.skip(skip)
+			.limit(Number(limit))
+			.lean();
+
+		return res.status(200).json({
+			status: true,
+			msg: "User Intro Videos fetched successfully",
+			total,
+			page: Number(page),
+			pages: Math.ceil(total / Number(limit)) || 1,
+			data: users
+		});
+	} catch (error) {
+		console.error("Error in getUserIntroVideos:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 module.exports = superAdmin;
