@@ -10,6 +10,7 @@ const mongoose = require("mongoose");
 const { deleteFromFirebase, imageUpload } = require("../util/googleDrive.util");
 const { getVideoDurationInSeconds } = require("get-video-duration");
 const fs = require("fs");
+const path = require("path");
 const jobModel = require("../models/job.model");
 const adminUserModel = require("../models/adminUser.model");
 const convertTo12HourFormat = require("../util/convertTo12HourFormat");
