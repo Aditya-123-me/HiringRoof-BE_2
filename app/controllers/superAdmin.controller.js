@@ -763,6 +763,40 @@ superAdmin.assignServiceHR = async (req, res, io) => {
 			console.log("Error updating job assignedHR:", jobUpdateErr.message);
 		}
 
+		// 1c. Create Notifications for both HR Admin and Recruiter
+		try {
+			const serviceTitle = service.serviceData?.title || service.serviceType || service.addonId?.title || "Add-on Service";
+			const recruiterName = service.userId?.name || "Client Recruiter";
+
+			// Notification to HR Admin
+			const hrNotif = await createNotification({
+				senderType: "adminUser",
+				receiverType: "adminUser",
+				senderId: req.user?._id?.toString() || hrId,
+				receiverId: hrId,
+				title: `New Service Add-on Assigned`,
+				desc: `You have been assigned to fulfill "${serviceTitle}" for ${recruiterName}.`,
+				logo: service.userId?.profileImage || "",
+			});
+			if (io && hrNotif) io.emit(`notifications_${hrId}`, hrNotif);
+
+			// Notification to Recruiter
+			if (service.userId?._id) {
+				const recNotif = await createNotification({
+					senderType: "adminUser",
+					receiverType: "user",
+					senderId: req.user?._id?.toString() || hrId,
+					receiverId: service.userId._id.toString(),
+					title: `HR Assigned to Your Service`,
+					desc: `HR Administrator ${hrAdmin.name} has been assigned to handle your "${serviceTitle}" request.`,
+					logo: hrAdmin.profileImage || "",
+				});
+				if (io && recNotif) io.emit(`notifications_${service.userId._id}`, recNotif);
+			}
+		} catch (notifErr) {
+			console.log("Error sending service assignment notifications:", notifErr.message);
+		}
+
 		// 2. Initialize / Get Conversation Room
 		const roomId = `hr_${hrId}_user_${service.userId._id}_service_${serviceId}`;
 

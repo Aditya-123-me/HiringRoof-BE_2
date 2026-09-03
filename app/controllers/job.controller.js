@@ -550,8 +550,9 @@ jobController.myJobs = async (req, res) => {
 		const page = req.params.page >= 1 ? req.params.page : 1;
 		const limit = req.query.limit >= 1 ? req.query.limit : 6;
 		const skip = limit * (page - 1);
+		const targetUserId = (req.query.userId && req.query.userId !== "undefined") ? req.query.userId : req.user._id;
 
-		const jobsData = await Job.find({ userId: req.user._id, isDeleted: { $ne: true } })
+		const jobsData = await Job.find({ userId: targetUserId, isDeleted: { $ne: true } })
 			.limit(limit)
 			.skip(skip)
 			.sort({ createdAt: -1 })
@@ -562,7 +563,7 @@ jobController.myJobs = async (req, res) => {
 				profileImage: 1,
 			})
 			.lean();
-		const jobCount = await Job.countDocuments({ userId: req.user._id, isDeleted: { $ne: true } });
+		const jobCount = await Job.countDocuments({ userId: targetUserId, isDeleted: { $ne: true } });
 
 		const serviceModel = require("../models/service.model");
 
@@ -572,7 +573,7 @@ jobController.myJobs = async (req, res) => {
 		}).select("_id name email number profileImage jobTarget").lean();
 
 		const activeServices = await serviceModel.find({
-			userId: req.user._id,
+			userId: targetUserId,
 			assignedHR: { $exists: true, $ne: null }
 		}).lean();
 

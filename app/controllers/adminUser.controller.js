@@ -365,17 +365,31 @@ adminUser.assignJob = async (req, res, io) => {
 				const job = await jobModel.findOne({ _id: jobId });
 				if (!job) continue; // Skip invalid job ID
 
+				// 1. Notify HR Admin
 				const data = await createNotification({
 					senderType: "adminUser",
 					receiverType: "adminUser",
 					senderId: req.user._id.toString(),
 					receiverId: userId,
-					title: `Job Assigned by admin`,
-					desc: `${job.jobTittle} job is assigned to you`,
+					title: `Job Assigned by Admin`,
+					desc: `"${job.jobTittle}" job is assigned to you`,
 					logo: job.companyLogo,
 				});
+				if (io && data) io.emit(`notifications_${data.receiverId._id}`, data);
 
-				io.emit(`notifications_${data.receiverId._id}`, data);
+				// 2. Notify Recruiter
+				if (job.userId) {
+					const recData = await createNotification({
+						senderType: "adminUser",
+						receiverType: "user",
+						senderId: req.user._id.toString(),
+						receiverId: job.userId.toString(),
+						title: `HR Administrator Assigned`,
+						desc: `HR Administrator ${user.name} has been assigned to manage your job "${job.jobTittle}".`,
+						logo: user.profileImage || job.companyLogo || "",
+					});
+					if (io && recData) io.emit(`notifications_${recData.receiverId._id}`, recData);
+				}
 			}
 		}
 
