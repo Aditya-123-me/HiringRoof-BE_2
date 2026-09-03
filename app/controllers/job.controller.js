@@ -1255,7 +1255,7 @@ jobController.generateJdPdf = async (req, res) => {
 
 		const doc = new PDFDocument({
 			size: "A4",
-			margin: { top: 40, bottom: 95, left: 40, right: 40 },
+			margin: { top: 40, bottom: 40, left: 40, right: 40 },
 			bufferPages: true,
 			autoFirstPage: false,
 		});
