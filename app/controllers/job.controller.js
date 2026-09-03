@@ -77,15 +77,31 @@ jobController.post = async (req, res, io) => {
 		}
 		if (req.body.addOn) bodyData.addOn = JSON.parse(req.body.addOn);
 		if (req.body.skills) {
+			let rawSkillsList = [];
 			if (typeof req.body.skills === "string") {
 				try {
-					bodyData.skills = JSON.parse(req.body.skills);
+					const parsed = JSON.parse(req.body.skills);
+					if (Array.isArray(parsed)) rawSkillsList = parsed;
+					else rawSkillsList = [req.body.skills];
 				} catch (e) {
-					bodyData.skills = req.body.skills.split(",").map((s) => s.trim()).filter(Boolean);
+					rawSkillsList = req.body.skills.split(",");
 				}
 			} else if (Array.isArray(req.body.skills)) {
-				bodyData.skills = req.body.skills;
+				rawSkillsList = req.body.skills;
 			}
+
+			const parsedSkills = [];
+			rawSkillsList.forEach((item) => {
+				if (typeof item === "string") {
+					item.split(",").forEach((s) => {
+						const trimmed = s.trim();
+						if (trimmed && !parsedSkills.includes(trimmed)) {
+							parsedSkills.push(trimmed);
+						}
+					});
+				}
+			});
+			bodyData.skills = parsedSkills;
 		}
 
 		if (req.body.skillDetails) {
@@ -1004,15 +1020,31 @@ jobController.createWithAddon = async (req, res, io) => {
 		bodyData.addOn = parsedJobData.addOn;
 		
 		if (parsedJobData.skills) {
+			let rawSkillsList = [];
 			if (typeof parsedJobData.skills === "string") {
 				try {
-					bodyData.skills = JSON.parse(parsedJobData.skills);
+					const parsed = JSON.parse(parsedJobData.skills);
+					if (Array.isArray(parsed)) rawSkillsList = parsed;
+					else rawSkillsList = [parsedJobData.skills];
 				} catch (e) {
-					bodyData.skills = parsedJobData.skills.split(",").map((s) => s.trim()).filter(Boolean);
+					rawSkillsList = parsedJobData.skills.split(",");
 				}
 			} else if (Array.isArray(parsedJobData.skills)) {
-				bodyData.skills = parsedJobData.skills;
+				rawSkillsList = parsedJobData.skills;
 			}
+
+			const parsedSkills = [];
+			rawSkillsList.forEach((item) => {
+				if (typeof item === "string") {
+					item.split(",").forEach((s) => {
+						const trimmed = s.trim();
+						if (trimmed && !parsedSkills.includes(trimmed)) {
+							parsedSkills.push(trimmed);
+						}
+					});
+				}
+			});
+			bodyData.skills = parsedSkills;
 		}
 
 		if (parsedJobData.skillDetails) {
