@@ -1237,17 +1237,18 @@ jobController.generateJdPdf = async (req, res) => {
 		};
 
 		const drawPageBackgroundAndHeader = (doc) => {
-			doc.save()
-			   .opacity(0.08)
+			doc.save();
+			doc.opacity(0.08)
 			   .font("Helvetica-Bold")
 			   .fontSize(72)
 			   .fillColor("#7E3FF3")
 			   .translate(300, 420)
 			   .rotate(-45)
-			   .text("HIRING ROOF", -250, 0, { align: "center", width: 500 })
-			   .restore();
+			   .text("HIRING ROOF", -250, 0, { align: "center", width: 500 });
+			doc.restore();
 
 			doc.rect(0, 0, 595, 10).fill("#7E3FF3");
+			doc.font("Helvetica").fontSize(9.5).fillColor("#555555");
 		};
 
 		const bodyX = 220;
@@ -1374,27 +1375,32 @@ jobController.generateJdPdf = async (req, res) => {
 		}
 
 		// Draw page footers on all pages (Page 1, Page 2, etc.)
-		const pages = doc.bufferedPageRange();
-		for (let i = pages.start; i < pages.start + pages.count; i++) {
+		const pageCount = doc.bufferedPageRange().count;
+		for (let i = 0; i < pageCount; i++) {
 			doc.switchToPage(i);
-			const footerY = 750;
+
+			const oldBottomMargin = doc.page.margins.bottom;
+			doc.page.margins.bottom = 0;
+
+			const footerY = 755;
 			const jobDetailsUrl = `https://www.hiringroof.com/job-card?id=${job._id}`;
 			const supportMeetUrl = "https://meet.google.com/xik-jmne-cqq";
 
 			doc.save();
 			doc.strokeColor("#E5E7EB").lineWidth(0.75).moveTo(40, footerY - 8).lineTo(555, footerY - 8).stroke();
 
-			doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#374151")
+			doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#374151")
 			   .text("View Job Post: ", 40, footerY, { continued: true })
-			   .font("Helvetica").fillColor("#7E3FF3")
+			   .font("Helvetica").fontSize(8.5).fillColor("#7E3FF3")
 			   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true });
 
-			doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#374151")
+			doc.font("Helvetica-Bold").fontSize(8.5).fillColor("#374151")
 			   .text("Meet Support: ", 40, footerY + 14, { continued: true })
-			   .font("Helvetica").fillColor("#2563EB")
+			   .font("Helvetica").fontSize(8.5).fillColor("#2563EB")
 			   .text(supportMeetUrl, { link: supportMeetUrl, underline: true });
 
 			doc.restore();
+			doc.page.margins.bottom = oldBottomMargin;
 		}
 
 		doc.end();
