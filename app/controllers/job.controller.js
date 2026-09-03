@@ -1385,14 +1385,14 @@ jobController.generateJdPdf = async (req, res) => {
 			doc.strokeColor("#E5E7EB").lineWidth(0.75).moveTo(40, footerY - 8).lineTo(555, footerY - 8).stroke();
 
 			doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#374151")
-			   .text("View Job Post: ", 40, footerY, { continued: true, lineBreak: false })
+			   .text("View Job Post: ", 40, footerY, { continued: true })
 			   .font("Helvetica").fillColor("#7E3FF3")
-			   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true, lineBreak: false });
+			   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true });
 
 			doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#374151")
-			   .text("Meet Support: ", 40, footerY + 13, { continued: true, lineBreak: false })
+			   .text("Meet Support: ", 40, footerY + 14, { continued: true })
 			   .font("Helvetica").fillColor("#2563EB")
-			   .text(supportMeetUrl, { link: supportMeetUrl, underline: true, lineBreak: false });
+			   .text(supportMeetUrl, { link: supportMeetUrl, underline: true });
 
 			doc.restore();
 		}
