@@ -401,7 +401,6 @@ jobController.getOneJob = async (req, res) => {
 	try {
 		const jobId = req.params.id;
 
-		let job = {};
 		const jobData = await Job.findOne({ _id: jobId })
 			.populate({
 				path: "userId",
@@ -409,21 +408,37 @@ jobController.getOneJob = async (req, res) => {
 			})
 			.lean();
 
-		job = jobData;
+		if (!jobData) {
+			return res.status(404).json({ status: false, msg: "Job not found!" });
+		}
+
+		let isSaved = false;
+		let isApplied = false;
 
 		if (req.user) {
 			const saveJobs = await Save.findOne({ userId: req.user._id });
-			let isSaved = saveJobs.jobId.includes(e._id);
-			console.log(isSaved, "is saved");
+			if (saveJobs && Array.isArray(saveJobs.jobId)) {
+				isSaved = saveJobs.jobId.some((id) => id.toString() === jobId.toString());
+			}
+
+			const applyRecord = await JobApplication.findOne({
+				jobId: jobId,
+				$or: [{ applicantId: req.user._id }, { userId: req.user._id }, { applierId: req.user._id }]
+			});
+			if (applyRecord) {
+				isApplied = true;
+			}
 		}
 
 		return res.json({
 			status: true,
 			msg: `Job fetch successfully !!`,
 			data: jobData,
+			isSaved,
+			isApplied,
 		});
 	} catch (error) {
-		console.log(error);
+		console.log("Error in getOneJob:", error);
 		return res.status(500).send({ status: false, msg: error.message });
 	}
 };
