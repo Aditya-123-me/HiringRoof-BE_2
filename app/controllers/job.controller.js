@@ -1389,7 +1389,13 @@ jobController.getAllAvailableCategories = async(req,res)=>{
 		const streams = await Job.distinct("stream", { blocked_status: { $ne: true }, isActive: true });
 
 		const uniqueSkills = [...new Set([...skills, ...skillSubCategories].map(s => typeof s === 'string' ? s.trim() : "").filter(Boolean))].sort();
-		const uniqueStreams = [...new Set(streams.map(s => typeof s === 'string' ? s.trim() : "").filter(Boolean))].sort();
+		const normalizedStreams = streams
+			.map(s => (typeof s === "string" ? s.trim().toLowerCase() : ""))
+			.map(s => (s === "tech" ? "science" : s))
+			.filter(Boolean);
+		const uniqueStreams = [...new Set(normalizedStreams)]
+			.filter(s => ["arts", "commerce", "science"].includes(s))
+			.sort();
 
 		return res.status(200).json({
 			status: true,
