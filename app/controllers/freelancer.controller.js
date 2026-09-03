@@ -170,49 +170,6 @@ freelancerController.reject = async (req, res) => {
 		console.log(error);
 		return res.status(500).send({ status: false, msg: error.message });
 	}
-// Check freelancer application status by email or phone
-freelancerController.checkStatus = async (req, res) => {
-	try {
-		const { email, phone } = req.body;
-
-		if (!email && !phone) {
-			return res.status(400).send({ status: false, msg: "Please provide an email or phone number to check status." });
-		}
-
-		const query = {};
-		if (email && phone) {
-			query.$or = [{ email: email.trim() }, { phone: phone.trim() }];
-		} else if (email) {
-			query.email = email.trim();
-		} else if (phone) {
-			query.phone = phone.trim();
-		}
-
-		const application = await Freelancer.findOne(query).sort({ createdAt: -1 });
-
-		if (!application) {
-			return res.status(404).send({ status: false, msg: "No application found matching the provided details." });
-		}
-
-		return res.status(200).send({
-			status: true,
-			msg: "Application status retrieved successfully.",
-			data: {
-				_id: application._id,
-				name: application.name,
-				email: application.email,
-				phone: application.phone,
-				status: application.status,
-				badge: application.badge || "Freelance Partner",
-				createdAt: application.createdAt,
-				rejectedReason: application.rejectedReason || "",
-				approvalDate: application.approvalDate || null,
-			},
-		});
-	} catch (error) {
-		console.log(error);
-		return res.status(500).send({ status: false, msg: error.message });
-	}
 };
 
 module.exports = freelancerController;
