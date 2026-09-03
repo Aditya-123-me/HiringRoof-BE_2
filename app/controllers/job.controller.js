@@ -1192,14 +1192,25 @@ jobController.generateJdPdf = async (req, res) => {
 		const cleanTextForPDF = (text) => {
 			if (!text) return "";
 			let cleaned = String(text);
+
+			// Normalize Windows \r\n and Mac \r line endings to \n FIRST
+			cleaned = cleaned.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+			// Strip Markdown code blocks
 			cleaned = cleaned.replace(/^```(?:html)?\s*/gi, "").replace(/\s*```$/gi, "");
+
+			// Convert HTML break / paragraph / list tags to newlines
 			cleaned = cleaned
 				.replace(/<br\s*\/?>/gi, "\n")
 				.replace(/<\/p>/gi, "\n\n")
 				.replace(/<\/div>/gi, "\n")
 				.replace(/<\/li>/gi, "\n")
 				.replace(/<li[^>]*>/gi, "  •  ");
+
+			// Strip remaining HTML tags
 			cleaned = cleaned.replace(/<[^>]+>/g, "");
+
+			// Decode HTML entities
 			cleaned = cleaned
 				.replace(/&nbsp;/gi, " ")
 				.replace(/&amp;/gi, "&")
@@ -1207,14 +1218,21 @@ jobController.generateJdPdf = async (req, res) => {
 				.replace(/&gt;/gi, ">")
 				.replace(/&quot;/gi, '"')
 				.replace(/&#39;/gi, "'");
-			cleaned = cleaned.replace(/[\u{1F000}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, "");
+
+			// Normalize quotes and dashes (en-dash, em-dash -> ASCII '-')
 			cleaned = cleaned
 				.replace(/[\u2018\u2019]/g, "'")
 				.replace(/[\u201C\u201D]/g, '"')
-				.replace(/[\u2013\u2014]/g, "-")
+				.replace(/[\u2013\u2014\u2212]/g, "-")
 				.replace(/\u2022/g, "•")
 				.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, " ");
-			cleaned = cleaned.replace(/[^\x0A\x0D\x20-\x7E\xA0-\xFF]/g, "");
+
+			// Strip multi-byte Emojis
+			cleaned = cleaned.replace(/[\u{1F000}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, "");
+
+			// Strictly allow ASCII printable characters and newlines \n (ASCII 10)
+			cleaned = cleaned.replace(/[^\x0A\x20-\x7E]/g, "");
+
 			return cleaned.replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n/g, "\n\n").trim();
 		};
 
@@ -1231,6 +1249,9 @@ jobController.generateJdPdf = async (req, res) => {
 
 			doc.rect(0, 0, 595, 10).fill("#7E3FF3");
 		};
+
+		const bodyX = 220;
+		const bodyWidth = 335;
 
 		const doc = new PDFDocument({
 			size: "A4",
@@ -1254,6 +1275,8 @@ jobController.generateJdPdf = async (req, res) => {
 
 		doc.on("pageAdded", () => {
 			drawPageBackgroundAndHeader(doc);
+			doc.x = bodyX;
+			doc.y = 40;
 		});
 
 		doc.addPage();
@@ -1314,31 +1337,38 @@ jobController.generateJdPdf = async (req, res) => {
 		   .text(`Salary: ${payClean} / ${payTypeClean}`, 40, doc.y + 2, { width: 160 });
 
 		// 2. Main Body Column (x = 220, width = 335)
-		const bodyX = 220;
-		doc.fontSize(16).fillColor("#222222").font("Helvetica-Bold").text(jobTitleClean, bodyX, mainStartY, { width: 335 });
-		doc.fontSize(9).fillColor("#888888").font("Helvetica-Oblique").text(`Posted on ${new Date(job.createdAt || Date.now()).toLocaleDateString("en-IN")}`, bodyX, doc.y + 3, { width: 335 });
+		doc.x = bodyX;
+		doc.y = mainStartY;
 
-		doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("About Company:", bodyX, doc.y + 16, { width: 335 });
+		doc.fontSize(16).fillColor("#222222").font("Helvetica-Bold").text(jobTitleClean, { width: bodyWidth });
+		doc.fontSize(9).fillColor("#888888").font("Helvetica-Oblique").text(`Posted on ${new Date(job.createdAt || Date.now()).toLocaleDateString("en-IN")}`, { width: bodyWidth });
+
+		doc.moveDown(0.8);
+		doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("About Company:", { width: bodyWidth });
+		doc.moveDown(0.2);
 		doc.fontSize(9.5).fillColor("#555555").font("Helvetica-Oblique").text(
 			"We are leading recruiters dedicated to connecting top-tier talent with ideal career paths, helping applicants match and establish stable growth directions in standard technical segments.",
-			bodyX, doc.y + 4, { width: 335, align: "justify", lineGap: 2.5 }
+			{ width: bodyWidth, align: "justify", lineGap: 2.5 }
 		);
 
 		const noteClean = cleanTextForPDF(job.note || "No detailed job summary provided.");
-		doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("Job Summary:", bodyX, doc.y + 14, { width: 335 });
+		doc.moveDown(0.8);
+		doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("Job Summary:", { width: bodyWidth });
+		doc.moveDown(0.2);
 		doc.fontSize(9.5).fillColor("#555555").font("Helvetica").text(
 			noteClean,
-			bodyX, doc.y + 4, { width: 335, align: "left", lineGap: 3 }
+			{ width: bodyWidth, align: "left", lineGap: 3 }
 		);
 
 		if (job.skills && job.skills.length > 0) {
-			doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("Required Skills & Knowledge:", bodyX, doc.y + 14, { width: 335 });
+			doc.moveDown(0.8);
+			doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("Required Skills & Knowledge:", { width: bodyWidth });
+			doc.moveDown(0.2);
 			doc.fontSize(9.5).fillColor("#555555").font("Helvetica");
-			doc.y += 4;
 			job.skills.forEach((skill) => {
 				const cleanSkill = cleanTextForPDF(skill);
 				if (cleanSkill) {
-					doc.fillColor("#7E3FF3").text("  •  ", bodyX, doc.y, { continued: true, width: 335 }).fillColor("#555555").text(cleanSkill);
+					doc.fillColor("#7E3FF3").text("  •  ", { continued: true, width: bodyWidth }).fillColor("#555555").text(cleanSkill);
 				}
 			});
 		}
