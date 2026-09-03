@@ -1255,7 +1255,7 @@ jobController.generateJdPdf = async (req, res) => {
 
 		const doc = new PDFDocument({
 			size: "A4",
-			margin: { top: 40, bottom: 85, left: 40, right: 40 },
+			margin: { top: 40, bottom: 95, left: 40, right: 40 },
 			bufferPages: true,
 			autoFirstPage: false,
 		});
@@ -1377,22 +1377,22 @@ jobController.generateJdPdf = async (req, res) => {
 		const pages = doc.bufferedPageRange();
 		for (let i = pages.start; i < pages.start + pages.count; i++) {
 			doc.switchToPage(i);
-			const footerY = 760;
+			const footerY = 750;
 			const jobDetailsUrl = `https://www.hiringroof.com/job-card?id=${job._id}`;
 			const supportMeetUrl = "https://meet.google.com/xik-jmne-cqq";
 
 			doc.save();
-			doc.strokeColor("#E5E7EB").lineWidth(0.75).moveTo(40, footerY - 10).lineTo(555, footerY - 10).stroke();
+			doc.strokeColor("#E5E7EB").lineWidth(0.75).moveTo(40, footerY - 8).lineTo(555, footerY - 8).stroke();
 
-			doc.fontSize(8).font("Helvetica-Bold").fillColor("#374151")
-			   .text("View Job Post: ", 40, footerY, { continued: true })
+			doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#374151")
+			   .text("View Job Post: ", 40, footerY, { continued: true, lineBreak: false })
 			   .font("Helvetica").fillColor("#7E3FF3")
-			   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true, continued: false });
+			   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true, lineBreak: false });
 
-			doc.fontSize(8).font("Helvetica-Bold").fillColor("#374151")
-			   .text("Meet Support: ", 340, footerY, { continued: true })
+			doc.fontSize(8.5).font("Helvetica-Bold").fillColor("#374151")
+			   .text("Meet Support: ", 40, footerY + 13, { continued: true, lineBreak: false })
 			   .font("Helvetica").fillColor("#2563EB")
-			   .text(supportMeetUrl, { link: supportMeetUrl, underline: true, continued: false });
+			   .text(supportMeetUrl, { link: supportMeetUrl, underline: true, lineBreak: false });
 
 			doc.restore();
 		}
