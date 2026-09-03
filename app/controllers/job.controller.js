@@ -1181,7 +1181,7 @@ jobController.myPendingAddons = async (req, res) => {
 }; 
 
 jobController.generateJdPdf = async (req, res) => {
-	try { 
+	try {
 		const { id } = req.params;
 		const job = await Job.findById(id).lean();
 		if (!job) return res.status(404).json({ status: false, msg: "Job description not found!" });
@@ -1189,12 +1189,60 @@ jobController.generateJdPdf = async (req, res) => {
 		const PDFDocument = require("pdfkit-table");
 		const axios = require("axios");
 
-		const doc = new PDFDocument({ margin: 50, size: "A4" });
+		const cleanTextForPDF = (text) => {
+			if (!text) return "";
+			let cleaned = String(text);
+			cleaned = cleaned.replace(/^```(?:html)?\s*/gi, "").replace(/\s*```$/gi, "");
+			cleaned = cleaned
+				.replace(/<br\s*\/?>/gi, "\n")
+				.replace(/<\/p>/gi, "\n\n")
+				.replace(/<\/div>/gi, "\n")
+				.replace(/<\/li>/gi, "\n")
+				.replace(/<li[^>]*>/gi, "  •  ");
+			cleaned = cleaned.replace(/<[^>]+>/g, "");
+			cleaned = cleaned
+				.replace(/&nbsp;/gi, " ")
+				.replace(/&amp;/gi, "&")
+				.replace(/&lt;/gi, "<")
+				.replace(/&gt;/gi, ">")
+				.replace(/&quot;/gi, '"')
+				.replace(/&#39;/gi, "'");
+			cleaned = cleaned.replace(/[\u{1F000}-\u{1F9FF}]|[\u{2600}-\u{27BF}]|[\u{1F300}-\u{1F5FF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, "");
+			cleaned = cleaned
+				.replace(/[\u2018\u2019]/g, "'")
+				.replace(/[\u201C\u201D]/g, '"')
+				.replace(/[\u2013\u2014]/g, "-")
+				.replace(/\u2022/g, "•")
+				.replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, " ");
+			cleaned = cleaned.replace(/[^\x0A\x0D\x20-\x7E\xA0-\xFF]/g, "");
+			return cleaned.replace(/[ \t]+/g, " ").replace(/\n\s*\n\s*\n/g, "\n\n").trim();
+		};
+
+		const drawPageBackgroundAndHeader = (doc) => {
+			doc.save()
+			   .opacity(0.08)
+			   .font("Helvetica-Bold")
+			   .fontSize(72)
+			   .fillColor("#7E3FF3")
+			   .translate(300, 420)
+			   .rotate(-45)
+			   .text("HIRING ROOF", -250, 0, { align: "center", width: 500 })
+			   .restore();
+
+			doc.rect(0, 0, 595, 10).fill("#7E3FF3");
+		};
+
+		const doc = new PDFDocument({
+			size: "A4",
+			margin: { top: 40, bottom: 85, left: 40, right: 40 },
+			bufferPages: true,
+			autoFirstPage: false,
+		});
 
 		const isDownload = String(req.query.download).toLowerCase() === "true";
-		const safeCompanyName = (job.companyName || job.companyShortName || "HiringRoof").replace(/\s+/g, "_");
+		const companyNameClean = cleanTextForPDF(job.companyName || job.companyShortName || "HiringRoof");
+		const safeCompanyName = (companyNameClean || "HiringRoof").replace(/\s+/g, "_");
 
-		// Set response headers for PDF stream
 		res.setHeader("Content-Type", "application/pdf");
 		res.setHeader(
 			"Content-Disposition",
@@ -1204,21 +1252,13 @@ jobController.generateJdPdf = async (req, res) => {
 		);
 		doc.pipe(res);
 
-		// Draw background watermark (Hiring Roof logo/text watermark) - Enlarged & Violet
-		doc.save()
-		   .opacity(0.12)
-		   .font("Helvetica-Bold")
-		   .fontSize(72)
-		   .fillColor("#7E3FF3")
-		   .translate(300, 420)
-		   .rotate(-45)
-		   .text("HIRING ROOF", -250, 0, { align: "center", width: 500 })
-		   .restore();
+		doc.on("pageAdded", () => {
+			drawPageBackgroundAndHeader(doc);
+		});
 
-		// Violet Style Top Banner Strip
-		doc.rect(0, 0, 595, 12).fill("#7E3FF3");
+		doc.addPage();
 
-		// Header - Left Side Logo
+		// Header - Logo
 		let logoBuffer = null;
 		if (job.companyLogo && !job.companyLogo.includes("drive.google.com")) {
 			try {
@@ -1244,70 +1284,87 @@ jobController.generateJdPdf = async (req, res) => {
 
 		doc.y = 20;
 		if (logoBuffer) {
-			// Compact size logo to fit letterhead properly without squeezing
 			doc.image(logoBuffer, 40, doc.y, { fit: [140, 45] });
 			doc.y += 50;
 		} else {
 			doc.y += 15;
 		}
 
-		// Divider Line below Header
+		// Divider Line
 		doc.strokeColor("#E0E0E0").lineWidth(1).moveTo(40, doc.y).lineTo(555, doc.y).stroke();
-		doc.y += 25;
+		doc.y += 20;
 
 		const mainStartY = doc.y;
 
-		// --- 2-Column Grid Layout (Inspire from SVR template) ---
-		
-		// 1. Sidebar (Width: 32% ~ 170px)
-		doc.fontSize(10.5).fillColor("#222222").font("Helvetica-Bold").text(job.companyName || "HV Tech Labs", 40, mainStartY);
-		doc.fontSize(9.5).fillColor("#666666").font("Helvetica").text(`Location: ${job.location}`, 40, doc.y + 4);
+		// 1. Sidebar (Width: 160px)
+		const jobTitleClean = cleanTextForPDF(job.jobTittle || "Job Position");
+		const locationClean = cleanTextForPDF(job.location || "Multiple Locations");
+		const workTypeClean = cleanTextForPDF(job.workType || "Full-Time");
+		const jobTypeClean = job.jobType === "wfh" ? "Remote" : "On-site";
+		const payClean = cleanTextForPDF(job.pay || "Competitive Pay").replace(/\$/g, "Rs. ");
+		const payTypeClean = cleanTextForPDF(job.payType || "monthly");
 
-		doc.fontSize(9.5).fillColor("#888888").font("Helvetica-Bold").text("DETAILS:", 40, doc.y + 20);
+		doc.fontSize(10.5).fillColor("#222222").font("Helvetica-Bold").text(companyNameClean, 40, mainStartY, { width: 160 });
+		doc.fontSize(9.5).fillColor("#666666").font("Helvetica").text(`Location: ${locationClean}`, 40, doc.y + 4, { width: 160 });
+
+		doc.fontSize(9.5).fillColor("#888888").font("Helvetica-Bold").text("DETAILS:", 40, doc.y + 16, { width: 160 });
 		doc.fontSize(9.5).fillColor("#666666").font("Helvetica")
-		   .text(`Role: ${job.workType || "Full-Time"}`, 40, doc.y + 4)
-		   .text(`Policy: ${job.jobType === "wfh" ? "Remote" : "On-site"}`)
-		   .text(`Salary: Rs. ${job.pay} / ${job.payType || "mo"}`);
+		   .text(`Role: ${workTypeClean}`, 40, doc.y + 4, { width: 160 })
+		   .text(`Policy: ${jobTypeClean}`, 40, doc.y + 2, { width: 160 })
+		   .text(`Salary: ${payClean} / ${payTypeClean}`, 40, doc.y + 2, { width: 160 });
 
-		// Bottom Left Contacts inside Sidebar (Pushed to bottom of page: y = 680)
-		const addressY = 680;
-		const jobDetailsUrl = `https://www.hiringroof.com/job-card?id=${job._id}`;
-		const supportMeetUrl = "https://meet.google.com/xik-jmne-cqq";
-
-		doc.fontSize(8.5).fillColor("#555555").font("Helvetica-Bold")
-		   .text("View Job Post:", 40, addressY)
-		   .font("Helvetica").fillColor("#7E3FF3")
-		   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true })
-		   .moveDown(0.8)
-		   .font("Helvetica-Bold").fillColor("#555555")
-		   .text("Meet Support:", 40, doc.y)
-		   .font("Helvetica").fillColor("#3B82F6")
-		   .text(supportMeetUrl, { link: supportMeetUrl, underline: true });
-
-		// 2. Letter Body Column (Width: 68% ~ starting at x = 220)
+		// 2. Main Body Column (x = 220, width = 335)
 		const bodyX = 220;
-		doc.fontSize(16).fillColor("#222222").font("Helvetica-Bold").text(job.jobTittle || "Job Description", bodyX, mainStartY);
-		doc.fontSize(9).fillColor("#888888").font("Helvetica-Oblique").text(`Posted on ${new Date(job.createdAt || Date.now()).toLocaleDateString("en-IN")}`, bodyX, doc.y + 3);
-		
-		doc.fontSize(10.5).fillColor("#444444").font("Helvetica").text("About Company:", bodyX, doc.y + 20);
-		doc.fontSize(10).fillColor("#555555").font("Helvetica-Oblique").text(
+		doc.fontSize(16).fillColor("#222222").font("Helvetica-Bold").text(jobTitleClean, bodyX, mainStartY, { width: 335 });
+		doc.fontSize(9).fillColor("#888888").font("Helvetica-Oblique").text(`Posted on ${new Date(job.createdAt || Date.now()).toLocaleDateString("en-IN")}`, bodyX, doc.y + 3, { width: 335 });
+
+		doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("About Company:", bodyX, doc.y + 16, { width: 335 });
+		doc.fontSize(9.5).fillColor("#555555").font("Helvetica-Oblique").text(
 			"We are leading recruiters dedicated to connecting top-tier talent with ideal career paths, helping applicants match and establish stable growth directions in standard technical segments.",
-			bodyX, doc.y + 5, { width: 335, align: "justify", lineGap: 3 }
+			bodyX, doc.y + 4, { width: 335, align: "justify", lineGap: 2.5 }
 		);
 
-		doc.fontSize(10.5).fillColor("#444444").font("Helvetica").text("Job Summary:", bodyX, doc.y + 15);
-		doc.fontSize(10).fillColor("#555555").font("Helvetica").text(
-			job.note || "No custom job description notes provided.",
-			bodyX, doc.y + 5, { width: 335, align: "justify", lineGap: 3 }
+		const noteClean = cleanTextForPDF(job.note || "No detailed job summary provided.");
+		doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("Job Summary:", bodyX, doc.y + 14, { width: 335 });
+		doc.fontSize(9.5).fillColor("#555555").font("Helvetica").text(
+			noteClean,
+			bodyX, doc.y + 4, { width: 335, align: "left", lineGap: 3 }
 		);
 
 		if (job.skills && job.skills.length > 0) {
-			doc.fontSize(10.5).fillColor("#444444").font("Helvetica").text("Required Skills & Knowledge:", bodyX, doc.y + 15);
-			doc.fontSize(10).fillColor("#555555").font("Helvetica");
-			doc.y += 5;
+			doc.fontSize(10.5).fillColor("#444444").font("Helvetica-Bold").text("Required Skills & Knowledge:", bodyX, doc.y + 14, { width: 335 });
+			doc.fontSize(9.5).fillColor("#555555").font("Helvetica");
+			doc.y += 4;
 			job.skills.forEach((skill) => {
-				doc.fillColor("#7E3FF3").text("  •  ", bodyX, doc.y, { continued: true }).fillColor("#555555").text(skill);
+				const cleanSkill = cleanTextForPDF(skill);
+				if (cleanSkill) {
+					doc.fillColor("#7E3FF3").text("  •  ", bodyX, doc.y, { continued: true, width: 335 }).fillColor("#555555").text(cleanSkill);
+				}
 			});
+		}
+
+		// Draw page footers on all pages (Page 1, Page 2, etc.)
+		const pages = doc.bufferedPageRange();
+		for (let i = pages.start; i < pages.start + pages.count; i++) {
+			doc.switchToPage(i);
+			const footerY = 760;
+			const jobDetailsUrl = `https://www.hiringroof.com/job-card?id=${job._id}`;
+			const supportMeetUrl = "https://meet.google.com/xik-jmne-cqq";
+
+			doc.save();
+			doc.strokeColor("#E5E7EB").lineWidth(0.75).moveTo(40, footerY - 10).lineTo(555, footerY - 10).stroke();
+
+			doc.fontSize(8).font("Helvetica-Bold").fillColor("#374151")
+			   .text("View Job Post: ", 40, footerY, { continued: true })
+			   .font("Helvetica").fillColor("#7E3FF3")
+			   .text(jobDetailsUrl, { link: jobDetailsUrl, underline: true, continued: false });
+
+			doc.fontSize(8).font("Helvetica-Bold").fillColor("#374151")
+			   .text("Meet Support: ", 340, footerY, { continued: true })
+			   .font("Helvetica").fillColor("#2563EB")
+			   .text(supportMeetUrl, { link: supportMeetUrl, underline: true, continued: false });
+
+			doc.restore();
 		}
 
 		doc.end();

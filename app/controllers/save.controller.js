@@ -16,7 +16,7 @@ save.create = async (req, res) => {
 				path: "userId",
 				select: "name email phone profileImage userType",
 			});
-			return res.status(200).send({ status: true, msg: "Job saved successfully !!", save: "save", updatedData: allData });
+			return res.status(200).send({ status: true, msg: "Job saved successfully !!", save: true, updatedData: allData });
 		}
 
 		const savedObj = findUser[0];
