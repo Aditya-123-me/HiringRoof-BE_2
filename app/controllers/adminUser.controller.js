@@ -688,7 +688,16 @@ adminUser.getJobHRdetails = async (req, res) => {
 		// Find jobs based on job IDs, optional serviceType filter, and in descending order of date
 		const query = { _id: { $in: jobIds } };
 		if (serviceType && serviceType.trim() !== "" && serviceType.toUpperCase() !== "ALL") {
-			query.serviceType = serviceType;
+			if (serviceType === "Standard") {
+				query.$or = [
+					{ serviceType: { $exists: false } },
+					{ serviceType: null },
+					{ serviceType: "" },
+					{ serviceType: { $regex: /^standard$/i } }
+				];
+			} else {
+				query.serviceType = { $regex: new RegExp(`^${serviceType.trim()}$`, "i") };
+			}
 		}
 
 		const jobsQuery = jobModel.find(query).sort("-createdAt");
