@@ -5,6 +5,11 @@ const save = {};
 
 save.create = async (req, res) => {
 	try {
+		const userType = req.user?.userType;
+		if (userType === "companyRecruiter" || userType === "individualRecruiter" || userType === "company") {
+			return res.status(403).send({ status: false, msg: "Recruiters cannot save jobs!" });
+		}
+
 		const jobId = req.params._id;
 		const userId = req.user._id.toString();
 
