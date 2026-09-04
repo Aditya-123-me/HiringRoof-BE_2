@@ -62,4 +62,8 @@ totalServicesCompleted: { type: Number, default: 0 },
 	{ timestamps: true }
 );
 
-module.exports = mongoose.model("adminUser", adminUserSchema);
+const AdminUser = mongoose.model("adminUser", adminUserSchema);
+try { mongoose.model("adminUsers", adminUserSchema); } catch (e) {}
+try { mongoose.model("adminusers", adminUserSchema); } catch (e) {}
+
+module.exports = AdminUser;

@@ -39,7 +39,7 @@ const jobApplicationSchema = mongoose.Schema(
 		feedback: {
 			comments: { type: String },
 			experience: { type: String },
-			givenBy: { type: mongoose.Schema.Types.ObjectId, ref: "adminUsers" },
+			givenBy: { type: mongoose.Schema.Types.ObjectId, ref: "adminUser" },
 			createdAt: { type: Date },
 			updatedAt: { type: Date },
 		},
@@ -51,7 +51,7 @@ const jobApplicationSchema = mongoose.Schema(
 			interview2Pending: { type: Boolean, default: false },
 			timestamp1: { type: Date, default: null },
 			timestamp2: { type: Date, default: null },
-			takenBy: { type: mongoose.Schema.Types.ObjectId, ref: "adminusers" },
+			takenBy: { type: mongoose.Schema.Types.ObjectId, ref: "adminUser" },
 		},
 	},
 	{ timestamps: true }
