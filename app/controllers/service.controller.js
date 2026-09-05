@@ -262,20 +262,51 @@ service.getHRAssignedServices = async (req, res) => {
  * PUT /service/update-fulfillment-status/:id
  * Allows assigned HR to update service progress, checklist & fulfillment status
  */
-service.updateFulfillmentStatus = async (req, res) => {
+service.updateFulfillmentStatus = async (req, res, io) => {
 	try {
 		const { id } = req.params;
 		const { fulfillmentStatus, workDone, workPending, progressPercentage } = req.body;
+		const conversationModel = require("../models/conversation.model");
+		const Notification = require("../models/notification.model");
 
-		const targetService = await serviceModel.findById(id);
+		const targetService = await serviceModel.findById(id).populate("userId").populate("assignedHR");
 		if (!targetService) {
 			return res.status(404).json({ status: false, msg: "Service record not found!" });
 		}
 
-		if (fulfillmentStatus) targetService.fulfillmentStatus = fulfillmentStatus;
+		if (fulfillmentStatus) {
+			targetService.fulfillmentStatus = fulfillmentStatus;
+			if (fulfillmentStatus === "COMPLETED") {
+				targetService.isClosed = true;
+				targetService.progressPercentage = 100;
+				targetService.closedBy = req.user._id;
+				targetService.closedAt = new Date();
+
+				await conversationModel.updateMany(
+					{ serviceId: id },
+					{ isClosed: true, closedBy: req.user._id, closedAt: new Date() }
+				);
+
+				if (io && targetService.userId) {
+					const serviceTitle = targetService.serviceData?.title || targetService.addonId?.title || "Service Order";
+					const notif = await Notification.create({
+						senderType: "adminUser",
+						senderId: req.user._id,
+						receiverId: targetService.userId._id || targetService.userId,
+						title: `Service Completed: ${serviceTitle}`,
+						desc: `Your service "${serviceTitle}" has been completed! Please rate and submit your review.`,
+					});
+					io.emit(`notifications_${targetService.userId._id || targetService.userId}`, notif);
+					io.emit(`service_closed_${id}`, { serviceId: id, isClosed: true });
+				}
+			}
+		}
+
 		if (workDone !== undefined) targetService.workDone = Array.isArray(workDone) ? workDone : [];
 		if (workPending !== undefined) targetService.workPending = Array.isArray(workPending) ? workPending : [];
-		if (progressPercentage !== undefined) targetService.progressPercentage = Number(progressPercentage);
+		if (progressPercentage !== undefined && fulfillmentStatus !== "COMPLETED") {
+			targetService.progressPercentage = Number(progressPercentage);
+		}
 
 		await targetService.save();
 
@@ -286,6 +317,80 @@ service.updateFulfillmentStatus = async (req, res) => {
 		});
 	} catch (error) {
 		console.error("Error in updateFulfillmentStatus:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+/**
+ * PUT /service/close-service/:id
+ * Allows HR or Recruiter/Candidate user to close/complete the service order & disable chat
+ */
+service.closeService = async (req, res, io) => {
+	try {
+		const { id } = req.params;
+		const conversationModel = require("../models/conversation.model");
+		const Notification = require("../models/notification.model");
+
+		const targetService = await serviceModel.findById(id).populate("userId").populate("assignedHR");
+		if (!targetService) {
+			return res.status(404).json({ status: false, msg: "Service record not found!" });
+		}
+
+		targetService.fulfillmentStatus = "COMPLETED";
+		targetService.progressPercentage = 100;
+		targetService.isClosed = true;
+		targetService.closedBy = req.user._id;
+		targetService.closedAt = new Date();
+		await targetService.save();
+
+		const conversation = await conversationModel.findOneAndUpdate(
+			{ serviceId: id },
+			{ isClosed: true, closedBy: req.user._id, closedAt: new Date() },
+			{ new: true }
+		);
+
+		if (io) {
+			const serviceTitle = targetService.serviceData?.title || targetService.addonId?.title || "Service Order";
+			
+			if (targetService.userId) {
+				const clientNotif = await Notification.create({
+					senderType: "adminUser",
+					senderId: req.user._id,
+					receiverId: targetService.userId._id || targetService.userId,
+					title: `Service Completed: ${serviceTitle}`,
+					desc: `Your service "${serviceTitle}" has been completed! Please rate and submit your review.`,
+				});
+				io.emit(`notifications_${targetService.userId._id || targetService.userId}`, clientNotif);
+				io.emit(`service_closed_${id}`, { serviceId: id, isClosed: true });
+			}
+
+			if (targetService.assignedHR) {
+				const hrNotif = await Notification.create({
+					senderType: "user",
+					senderId: req.user._id,
+					receiverId: targetService.assignedHR._id || targetService.assignedHR,
+					title: `Service Closed: ${serviceTitle}`,
+					desc: `Service order "${serviceTitle}" has been closed/completed.`,
+				});
+				io.emit(`notifications_${targetService.assignedHR._id || targetService.assignedHR}`, hrNotif);
+			}
+
+			if (conversation && conversation.roomId) {
+				io.to(conversation.roomId).emit(`chat_closed_${conversation.roomId}`, {
+					roomId: conversation.roomId,
+					isClosed: true,
+					msg: "This service and conversation room have been closed."
+				});
+			}
+		}
+
+		return res.status(200).json({
+			status: true,
+			msg: "Service marked as completed and closed successfully! Chatting is now disabled.",
+			data: targetService,
+		});
+	} catch (error) {
+		console.error("Error in closeService:", error);
 		return res.status(500).json({ status: false, msg: error.message });
 	}
 };

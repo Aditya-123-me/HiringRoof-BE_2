@@ -242,6 +242,10 @@ chatController.sendMessage = async (req, res) => {
 			return res.status(404).json({ status: false, msg: "Conversation not found!" });
 		}
 
+		if (conversation.isClosed) {
+			return res.status(400).json({ status: false, isClosed: true, msg: "This service/conversation has been marked as completed & closed. Chatting is disabled." });
+		}
+
 		const isHR = req.user.type === "hr" || req.user.type === "admin" || req.user.type === "sub-admin";
 		const senderType = isHR ? "hr" : "recruiter";
 

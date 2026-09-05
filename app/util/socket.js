@@ -112,6 +112,19 @@ module.exports = (io) => {
 				const { roomId, text, senderId, senderType, conversationId, attachments } = data;
 				if (!roomId || !text?.trim()) return;
 
+				// Check if conversation is closed
+				const activeConv = conversationId 
+					? await conversationModel.findById(conversationId)
+					: await conversationModel.findOne({ roomId });
+
+				if (activeConv && activeConv.isClosed) {
+					socket.emit(`chatError_${roomId}`, {
+						msg: "This service/conversation has been closed. Chatting is disabled.",
+						isClosed: true
+					});
+					return;
+				}
+
 				const message = await messageModel.create({
 					conversationId: conversationId || null,
 					roomId,

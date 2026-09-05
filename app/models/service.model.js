@@ -55,7 +55,10 @@ const serviceSchema = mongoose.Schema(
 		reviewText: { type: String, default: "" },
 		workDone: { type: [String], default: [] },
 		workPending: { type: [String], default: [] },
-		progressPercentage: { type: Number, default: 0 }
+		progressPercentage: { type: Number, default: 0 },
+		isClosed: { type: Boolean, default: false },
+		closedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
+		closedAt: { type: Date, default: null }
 	},
 	{ timestamps: true }
 );

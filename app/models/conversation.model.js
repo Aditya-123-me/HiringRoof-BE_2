@@ -31,6 +31,9 @@ const conversationSchema = mongoose.Schema(
 		unreadCountHR: { type: Number, default: 0 },
 		unreadCountUser: { type: Number, default: 0 },
 		unreadCountRecruiter: { type: Number, default: 0 }, // Kept for backward compatibility
+		isClosed: { type: Boolean, default: false },
+		closedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
+		closedAt: { type: Date, default: null },
 	},
 	{ timestamps: true }
 );
