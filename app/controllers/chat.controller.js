@@ -55,53 +55,109 @@ chatController.getOrCreateRoom = async (req, res) => {
 		}
 
 		// ----------------------------------------------------
-		// B. SEARCH EXISTING CONVERSATION ROOM (SCOPED BY JOB / SERVICE)
+		// B. SEARCH EXISTING CONVERSATION ROOM (SMART DEDUPLICATION)
 		// ----------------------------------------------------
-		const queryFilter = {
+		let conversation = null;
+
+		// 1. Primary exact match search (active/unclosed preferred)
+		const baseFilter = {
 			hrId: finalHrId,
-			$or: [{ userId: finalUserId }, { recruiterId: finalUserId }]
+			$or: [{ userId: finalUserId }, { recruiterId: finalUserId }],
+			isClosed: { $ne: true }
 		};
 
-		if (jobId) {
-			queryFilter.jobId = jobId;
-		} else if (serviceId) {
-			queryFilter.serviceId = serviceId;
+		if (serviceId) {
+			conversation = await conversationModel.findOne({ ...baseFilter, serviceId })
+				.populate("hrId", "name email number profileImage")
+				.populate("recruiterId", "name email profileImage companyName")
+				.populate("userId", "name email profileImage companyName userType phone")
+				.populate("jobId", "jobTittle companyName companyLogo location")
+				.populate("serviceId");
+		} else if (jobId) {
+			conversation = await conversationModel.findOne({ ...baseFilter, jobId })
+				.populate("hrId", "name email number profileImage")
+				.populate("recruiterId", "name email profileImage companyName")
+				.populate("userId", "name email profileImage companyName userType phone")
+				.populate("jobId", "jobTittle companyName companyLogo location")
+				.populate("serviceId");
 		}
 
-		let conversation = await conversationModel.findOne(queryFilter)
-			.populate("hrId", "name email number profileImage")
-			.populate("recruiterId", "name email profileImage companyName")
-			.populate("userId", "name email profileImage companyName userType phone")
-			.populate("jobId", "jobTittle companyName companyLogo location")
-			.populate("serviceId");
+		// 2. Smart Service Deduplication Search (Same Plan/Addon or Title for this User & HR)
+		if (!conversation && serviceId) {
+			try {
+				const serviceModel = require("../models/service.model");
+				const targetService = await serviceModel.findById(serviceId);
+				if (targetService) {
+					const title = targetService.serviceData?.title;
+					const addonId = targetService.addonId;
 
-		// Fallback: If jobId was passed but conversation was created via service without jobId, update & reuse
-		if (!conversation && jobId) {
-			conversation = await conversationModel.findOne({
+					const serviceOrConditions = [];
+					if (addonId) serviceOrConditions.push({ addonId });
+					if (title) serviceOrConditions.push({ "serviceData.title": title });
+
+					if (serviceOrConditions.length > 0) {
+						const matchingServices = await serviceModel.find({
+							userId: finalUserId,
+							$or: serviceOrConditions
+						}).select("_id");
+
+						const matchingIds = matchingServices.map(s => s._id);
+
+						if (matchingIds.length > 0) {
+							conversation = await conversationModel.findOne({
+								hrId: finalHrId,
+								$or: [{ userId: finalUserId }, { recruiterId: finalUserId }],
+								serviceId: { $in: matchingIds },
+								isClosed: { $ne: true }
+							})
+								.sort({ updatedAt: -1 })
+								.populate("hrId", "name email number profileImage")
+								.populate("recruiterId", "name email profileImage companyName")
+								.populate("userId", "name email profileImage companyName userType phone")
+								.populate("jobId", "jobTittle companyName companyLogo location")
+								.populate("serviceId");
+						}
+					}
+				}
+			} catch (err) {
+				console.error("Error in service deduplication check:", err.message);
+			}
+		}
+
+		// 3. Fallback: Any active unclosed conversation between this HR and User for service / job
+		if (!conversation) {
+			const fallbackFilter = {
 				hrId: finalHrId,
 				$or: [{ userId: finalUserId }, { recruiterId: finalUserId }],
-				$or: [{ jobId: null }, { jobId: { $exists: false } }]
-			})
+				isClosed: { $ne: true }
+			};
+			if (serviceId) fallbackFilter.conversationType = "service";
+			else if (jobId) fallbackFilter.conversationType = "job";
+
+			conversation = await conversationModel.findOne(fallbackFilter)
 				.sort({ updatedAt: -1 })
 				.populate("hrId", "name email number profileImage")
 				.populate("recruiterId", "name email profileImage companyName")
 				.populate("userId", "name email profileImage companyName userType phone")
 				.populate("jobId", "jobTittle companyName companyLogo location")
 				.populate("serviceId");
-
-			if (conversation) {
-				conversation.jobId = jobId;
-				await conversation.save();
-				conversation = await conversationModel.findById(conversation._id)
-					.populate("hrId", "name email number profileImage")
-					.populate("recruiterId", "name email profileImage companyName")
-					.populate("userId", "name email profileImage companyName userType phone")
-					.populate("jobId", "jobTittle companyName companyLogo location")
-					.populate("serviceId");
-			}
 		}
 
+		// 4. Update & Reuse conversation if found
 		if (conversation) {
+			let needsSave = false;
+			if (serviceId && (!conversation.serviceId || conversation.serviceId._id?.toString() !== serviceId.toString())) {
+				conversation.serviceId = serviceId;
+				needsSave = true;
+			}
+			if (jobId && (!conversation.jobId || conversation.jobId._id?.toString() !== jobId.toString())) {
+				conversation.jobId = jobId;
+				needsSave = true;
+			}
+			if (needsSave) {
+				await conversation.save();
+			}
+
 			return res.status(200).json({
 				status: true,
 				data: conversation,
