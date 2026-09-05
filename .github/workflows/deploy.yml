@@ -3,8 +3,7 @@ name: Deploy HiringRoof Backend
 on:
   push:
     branches:
-      - main
-      - master
+      - anubhaw
 
 jobs:
   deploy:
@@ -33,10 +32,12 @@ jobs:
           port: ${{ secrets.SERVER_PORT || 22 }}
           script: |
             set -e
-            echo "🚀 Deploying Backend to /var/www/html/hiringroof-backend..."
+            echo "🚀 Deploying Backend (anubhaw branch) to /var/www/html/hiringroof-backend..."
             cd /var/www/html/hiringroof-backend
             if [ -d ".git" ]; then
-              git pull origin main || git pull origin master
+              git fetch origin
+              git checkout anubhaw || git checkout -b anubhaw origin/anubhaw
+              git pull origin anubhaw
             fi
             npm ci --production
             pm2 restart hiringroof-backend || pm2 start index.js --name "hiringroof-backend"
