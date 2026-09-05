@@ -14,7 +14,7 @@ module.exports = (router, io) => {
 
 	router.get("/job/addons-jobs", authorization2nd, jobController.getAddOnJobs);
 	
-	router.get("/job/all", jobController.getJobs);
+	router.get("/job/all", authorization2nd, jobController.getJobs);
 
 	router.get("/job/all-after-login", authorization, jobController.getJobsAuth);
 

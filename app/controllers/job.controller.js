@@ -209,8 +209,17 @@ jobController.getAddOnJobs = async (req, res) => {
 		let filters = {};
 		filters.isActive = true;
 		filters.blocked_status = false;
+		filters.isDeleted = { $ne: true };
 		const regexArray = addons.map((data) => new RegExp(data, "i"));
 		filters.serviceType = { $in: regexArray };
+
+		if (req.user && req.user._id) {
+			const userApplications = await JobApplication.find({ applicantId: req.user._id }).select("jobId").lean();
+			const appliedJobIds = userApplications.map((app) => app.jobId).filter(Boolean);
+			if (appliedJobIds.length > 0) {
+				filters._id = { $nin: appliedJobIds };
+			}
+		}
 
 		const jobsData = await Job.find(filters)
 			.limit(limit)
@@ -293,6 +302,14 @@ jobController.getJobs = async (req, res) => {
 		else if (req.query.sort === "highest_salary" || req.query.sort === "salary") sortOption = { pay: -1, createdAt: -1 };
 		else if (req.query.sort === "most_recent") sortOption = { createdAt: -1 };
 
+		if (req.user && req.user._id) {
+			const userApplications = await JobApplication.find({ applicantId: req.user._id }).select("jobId").lean();
+			const appliedJobIds = userApplications.map((app) => app.jobId).filter(Boolean);
+			if (appliedJobIds.length > 0) {
+				filters._id = { $nin: appliedJobIds };
+			}
+		}
+
 		const jobsData = await Job.find(filters)
 			.limit(limit)
 			.skip(skip)
@@ -352,6 +369,14 @@ jobController.getJobsAuth = async (req, res) => {
 		if (req.query.sort === "popular") sortOption = { vacancies: -1, createdAt: -1 };
 		else if (req.query.sort === "highest_salary" || req.query.sort === "salary") sortOption = { pay: -1, createdAt: -1 };
 		else if (req.query.sort === "most_recent") sortOption = { createdAt: -1 };
+
+		if (req.user && req.user._id) {
+			const userApplications = await JobApplication.find({ applicantId: req.user._id }).select("jobId").lean();
+			const appliedJobIds = userApplications.map((app) => app.jobId).filter(Boolean);
+			if (appliedJobIds.length > 0) {
+				filters._id = { $nin: appliedJobIds };
+			}
+		}
 
 		const jobsData = await Job.find(filters)
 			.limit(limit)
@@ -491,6 +516,14 @@ jobController.search = async (req, res) => {
 		filterCondition.blocked_status = { $ne: true };
 		filterCondition.isDeleted = { $ne: true };
 
+		if (req.user && req.user._id) {
+			const userApplications = await JobApplication.find({ applicantId: req.user._id }).select("jobId").lean();
+			const appliedJobIds = userApplications.map((app) => app.jobId).filter(Boolean);
+			if (appliedJobIds.length > 0) {
+				filterCondition._id = { $nin: appliedJobIds };
+			}
+		}
+
 		let data = await Job.find(filterCondition)
 			.limit(limit)
 			.skip(skip)
@@ -532,8 +565,8 @@ jobController.search = async (req, res) => {
 		return res.json({
 			status: true,
 			msg: jobs.length === 0 ? `No job found !!` : `Job search result fetch successfully !!`,
-			allCount: count,
-			pageCount: parseInt(Math.ceil(count / limit)),
+			allCount: totalCount,
+			pageCount: parseInt(Math.ceil(totalCount / limit)),
 			currentPage: parseInt(page),
 			jobs: jobs,
 		});

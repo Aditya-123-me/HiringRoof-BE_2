@@ -734,7 +734,7 @@ jobApplication.getInterviews = async (req, res) => {
 			.lean();
 		const companyJobCount = await JobApplication.countDocuments({
 			applierId: userId,
-			shortlist: false,
+			shortlist: true,
 			interviews: true,
 			interviews2: false,
 			selectedCandidates: null,
@@ -794,8 +794,8 @@ jobApplication.getInterviews2 = async (req, res) => {
 			.lean();
 		const companyJobCount = await JobApplication.countDocuments({
 			applierId: userId,
-			shortlist: false,
-			interviews: false,
+			shortlist: true,
+			interviews: true,
 			interviews2: true,
 			selectedCandidates: null,
 		});
@@ -1262,7 +1262,7 @@ jobApplication.getApplicationsJobSeeker = async (req, res) => {
 			})
 			.lean();
 		const companyJobCount = await JobApplication.countDocuments({
-			applierId: userId,
+			applicantId: userId,
 			shortlist: false,
 			interviews: false,
 			interviews2: false,
