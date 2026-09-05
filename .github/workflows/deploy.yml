@@ -32,15 +32,17 @@ jobs:
           script: |
             set -e
             echo "🚀 Deploying Backend (anubhaw branch) to /var/www/html/hiringroof-backend..."
+            mkdir -p /var/www/html/hiringroof-backend
             cd /var/www/html/hiringroof-backend
-            if [ -d ".git" ]; then
-              git fetch origin
-              git checkout anubhaw || git checkout -b anubhaw origin/anubhaw
-              git pull origin anubhaw
-            else
-              echo "⚠️ /var/www/html/hiringroof-backend is not a git repo yet."
+            if [ ! -d ".git" ]; then
+              echo "Initializing git repository on server..."
+              git init
+              git remote add origin https://github.com/Aditya-123-me/HiringRoof-BE_2.git || git remote set-url origin https://github.com/Aditya-123-me/HiringRoof-BE_2.git
             fi
+            git fetch origin anubhaw
+            git checkout -B anubhaw origin/anubhaw
+            git pull origin anubhaw
             npm install --omit=dev
-            pm2 restart hiringroof-backend || pm2 start index.js --name "hiringroof-backend"
+            pm2 restart all || pm2 start index.js --name "hiringroof-backend"
             pm2 save
             echo "✅ Backend Deployment Complete!"
