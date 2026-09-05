@@ -5,6 +5,7 @@ const AdminUser = require("../models/adminUser.model");
 const convertTo12HourFormat = require("../util/convertTo12HourFormat");
 const getProfileImages = require("../util/getprofileImages");
 const createNotification = require("../util/createNotification");
+const { notifyStageEvent } = require("../util/notifyStageEvent");
 const { ObjectId } = require("mongoose").Types;
 const mongoose = require("mongoose");
 const adminUserModel = require("../models/adminUser.model");
@@ -897,25 +898,21 @@ jobApplication.shortlist = async (req, res, io) => {
 
 		await User.findByIdAndUpdate(application.applicantId, { status: "Shortlisted", response: "Shortlisted" });
 
-		const data = await createNotification({
-			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You are shortlisted for ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
+		
 
-		const data2 = await createNotification({
+		
+
+		await notifyStageEvent({
+			io,
 			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `You shortlisted ${
-				updatedApplication.applicantId.name === "" ? "Someone" : updatedApplication.applicantId.name
-			} for ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
+			senderType: "user",
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `You are shortlisted for ${updatedApplication.jobId.jobTittle} at ${updatedApplication.jobId.companyName || "Hiring Roof"}`,
+			recruiterMsg: `You shortlisted ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`,
+			hrMsg: `${updatedApplication.applicantId.name || "Candidate"} was shortlisted for ${updatedApplication.jobId.jobTittle}`
 		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for shortlist !!", data: updatedApplication });
 	} catch (error) {
@@ -952,23 +949,21 @@ jobApplication.notSelected = async (req, res, io) => {
 
 		await User.findByIdAndUpdate(application.applicantId, { status: "Rejected", response: "Rejected" });
 
-		const data = await createNotification({
-			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You are not selected for ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
+		
 
-		const data2 = await createNotification({
+		
+
+		await notifyStageEvent({
+			io,
 			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `You rejected ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
+			senderType: "user",
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `Application update: You were not selected for ${updatedApplication.jobId.jobTittle} at ${updatedApplication.jobId.companyName || "Hiring Roof"}`,
+			recruiterMsg: `You rejected ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`,
+			hrMsg: `${updatedApplication.applicantId.name || "Candidate"} was marked as not selected for ${updatedApplication.jobId.jobTittle}`
 		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for not selected !!", data: updatedApplication });
 	} catch (error) {
@@ -1035,23 +1030,17 @@ jobApplication.doInterviewSelect = async (req, res, io) => {
 			await hrAdmin.save();
 		}
 
-		const data = await createNotification({
+		await notifyStageEvent({
+			io,
 			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You have been selected for interview for the ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviewsDate} at ${updatedApplication.interviewsTime}`,
-			logo: updatedApplication.jobId.companyLogo,
+			senderType: "user",
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `Interview Round 1 scheduled for ${updatedApplication.jobId.jobTittle} on ${updatedApplication.interviewsDate || ""} at ${updatedApplication.interviewsTime || ""}`,
+			recruiterMsg: `Interview Round 1 scheduled with ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle}`,
+			hrMsg: `Interview Round 1 scheduled with ${updatedApplication.applicantId.name || "Candidate"} for job ${updatedApplication.jobId.jobTittle}`
 		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
-
-		const data2 = await createNotification({
-			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `You schedule first round of interview with ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviews2Date} at ${updatedApplication.interviewsTime}`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for interview !!", data: updatedApplication });
 	} catch (error) {
@@ -1118,23 +1107,17 @@ jobApplication.doInterview2Select = async (req, res, io) => {
 				await hrAdmin.save();
 			}
 
-		const data = await createNotification({
+		await notifyStageEvent({
+			io,
 			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You are selected for a second round of interviews for the ${updatedApplication.jobId.jobTittle} job on ${req.body.interviews2Date} at ${updatedApplication.interviews2Time}`,
-			logo: updatedApplication.jobId.companyLogo,
+			senderType: "user",
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `Interview Round 2 scheduled for ${updatedApplication.jobId.jobTittle} on ${req.body.interviews2Date || updatedApplication.interviews2Date || ""} at ${updatedApplication.interviews2Time || ""}`,
+			recruiterMsg: `Interview Round 2 scheduled with ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle}`,
+			hrMsg: `Interview Round 2 scheduled with ${updatedApplication.applicantId.name || "Candidate"} for job ${updatedApplication.jobId.jobTittle}`
 		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
-
-		const data2 = await createNotification({
-			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `You schedule second round of interview with ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviews2Date} at ${updatedApplication.interviews2Time}`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for interview 2 !!", data: updatedApplication });
 	} catch (error) {
@@ -1206,23 +1189,17 @@ jobApplication.selected = async (req, res, io) => {
 		ownUser.totalHired = ownUser.totalHired + 1;
 		await ownUser.save();
 
-		const data = await createNotification({
+		await notifyStageEvent({
+			io,
 			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You have been selected for the ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
+			senderType: "user",
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `Congratulations! You have been selected for ${updatedApplication.jobId.jobTittle} at ${updatedApplication.jobId.companyName || "Hiring Roof"}`,
+			recruiterMsg: `You selected ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`,
+			hrMsg: `${updatedApplication.applicantId.name || "Candidate"} has been selected for ${updatedApplication.jobId.jobTittle}`
 		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
-
-		const data2 = await createNotification({
-			senderId: updatedApplication.applierId,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `You selected ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for selected !!", data: updatedApplication });
 	} catch (error) {
@@ -1230,6 +1207,7 @@ jobApplication.selected = async (req, res, io) => {
 		return res.status(500).send({ status: false, msg: error.message });
 	}
 };
+
 // Company End
 
 // Job Seeker Start
@@ -1853,27 +1831,17 @@ jobApplication.adminShortlist = async (req, res, io) => {
 
 		await User.findByIdAndUpdate(application.applicantId, { status: "Shortlisted", response: "Shortlisted" });
 
-		const data = await createNotification({
-			senderType: "adminUser",
+		await notifyStageEvent({
+			io,
 			senderId: req.user._id,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You are shortlisted for ${updatedApplication.jobId.jobTittle} job by Admin`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
-
-		const data2 = await createNotification({
 			senderType: "adminUser",
-			senderId: req.user._id,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `Admin shortlisted ${
-				updatedApplication.applicantId.name === "" ? "Someone" : updatedApplication.applicantId.name
-			} for ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `You are shortlisted for ${updatedApplication.jobId.jobTittle} at ${updatedApplication.jobId.companyName || "Hiring Roof"} by Admin`,
+			recruiterMsg: `Admin shortlisted ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`,
+			hrMsg: `${updatedApplication.applicantId.name || "Candidate"} was shortlisted for ${updatedApplication.jobId.jobTittle} by Admin`
 		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for shortlist from Admin Side !!", data: updatedApplication });
 	} catch (error) {
@@ -1931,25 +1899,17 @@ jobApplication.doInterviewSelectAdminSide = async (req, res, io) => {
 			await hrAdmin.save();
 		}
 
-		const data = await createNotification({
-			senderType: "adminUser",
+		await notifyStageEvent({
+			io,
 			senderId: req.user._id,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You are selected for interview for the ${updatedApplication.jobId.jobTittle} job by Admin on ${updatedApplication.interviewsDate} at ${updatedApplication.interviewsTime}`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
-
-		const data2 = await createNotification({
 			senderType: "adminUser",
-			senderId: req.user._id,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `Admin scheduled first round of interview with ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviewsDate} at ${updatedApplication.interviewsTime}`,
-			logo: updatedApplication.jobId.companyLogo,
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `Interview Round 1 scheduled for ${updatedApplication.jobId.jobTittle} on ${updatedApplication.interviewsDate || ""} at ${updatedApplication.interviewsTime || ""} by Admin`,
+			recruiterMsg: `Admin scheduled first round of interview with ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviewsDate} at ${updatedApplication.interviewsTime}`,
+			hrMsg: `Admin scheduled first round of interview with ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`
 		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for interview from Admin Side!!", data: updatedApplication });
 	} catch (error) {
@@ -2006,25 +1966,17 @@ jobApplication.doInterview2SelectAdminSide = async (req, res, io) => {
 			await hrAdmin.save();
 		}
 
-		const data = await createNotification({
-			senderType: "adminUser",
+		await notifyStageEvent({
+			io,
 			senderId: req.user._id,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You are selected for a second round of interviews for the ${updatedApplication.jobId.jobTittle} job by Admin on ${req.body.interviews2Date} at ${updatedApplication.interviews2Time}`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
-
-		const data2 = await createNotification({
 			senderType: "adminUser",
-			senderId: req.user._id,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `Admin scheduled second round of interview with ${updatedApplication.applicantId.name} for ${updatedApplication.jobId.jobTittle} job on ${updatedApplication.interviews2Date} at ${updatedApplication.interviews2Time}`,
-			logo: updatedApplication.jobId.companyLogo,
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `Interview Round 2 scheduled for ${updatedApplication.jobId.jobTittle} on ${req.body.interviews2Date || ""} at ${updatedApplication.interviews2Time || ""} by Admin`,
+			recruiterMsg: `Admin scheduled second round of interview with ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job on ${req.body.interviews2Date} at ${updatedApplication.interviews2Time}`,
+			hrMsg: `Admin scheduled second round of interview with ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`
 		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "Application updated for interview 2 from Admin Side !!", data: updatedApplication });
 	} catch (error) {
@@ -2078,25 +2030,17 @@ jobApplication.selectedAdminSide = async (req, res, io) => {
 			await adminUser.save();
 		}
 
-		const data = await createNotification({
-			senderType: "adminUser",
+		await notifyStageEvent({
+			io,
 			senderId: req.user._id,
-			receiverId: updatedApplication.applicantId,
-			title: `${updatedApplication.jobId.companyName}`,
-			desc: `You have been selected for the ${updatedApplication.jobId.jobTittle} job by Admin`,
-			logo: updatedApplication.jobId.companyLogo,
-		});
-		io.emit(`notifications_${data.receiverId._id}`, data);
-
-		const data2 = await createNotification({
 			senderType: "adminUser",
-			senderId: req.user._id,
-			receiverId: updatedApplication.applierId,
-			title: `${updatedApplication.jobId.jobTittle}`,
-			desc: `Admin selected candidate ${updatedApplication.applicantId.name} for your ${updatedApplication.jobId.jobTittle} job`,
-			logo: updatedApplication.jobId.companyLogo,
+			candidateId: updatedApplication.applicantId,
+			recruiterId: updatedApplication.applierId,
+			job: updatedApplication.jobId,
+			candidateMsg: `Congratulations! You have been selected for ${updatedApplication.jobId.jobTittle} at ${updatedApplication.jobId.companyName || "Hiring Roof"} by Admin`,
+			recruiterMsg: `Admin selected candidate ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`,
+			hrMsg: `Admin selected candidate ${updatedApplication.applicantId.name || "Candidate"} for ${updatedApplication.jobId.jobTittle} job`
 		});
-		io.emit(`notifications_${data2.receiverId._id}`, data2);
 
 		return res.status(200).send({ status: true, msg: "You selected this candidate !!", data: updatedApplication });
 	} catch (error) {
@@ -2110,7 +2054,7 @@ jobApplication.selectedAdminSide = async (req, res, io) => {
  * Body: { status }
  * Updates the pipelineStatus of a specific JobApplication (per-job per-candidate)
  */
-jobApplication.updatePipelineStatus = async (req, res) => {
+jobApplication.updatePipelineStatus = async (req, res, io) => {
 	try {
 		const { applicationId } = req.params;
 		const { status, date, time } = req.body;

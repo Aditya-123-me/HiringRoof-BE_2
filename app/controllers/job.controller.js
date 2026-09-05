@@ -439,6 +439,10 @@ jobController.getOneJob = async (req, res) => {
 
 		let isSaved = false;
 		let isApplied = false;
+		let applicationStatus = null;
+		let isRejected = false;
+		let isSelected = false;
+		let isShortlisted = false;
 
 		if (req.user) {
 			const saveJobs = await Save.findOne({ userId: req.user._id });
@@ -452,6 +456,22 @@ jobController.getOneJob = async (req, res) => {
 			});
 			if (applyRecord) {
 				isApplied = true;
+				if (applyRecord.selectedCandidates === false || applyRecord.pipelineStatus === "Rejected") {
+					applicationStatus = "Rejected";
+					isRejected = true;
+				} else if (applyRecord.selectedCandidates === true || applyRecord.pipelineStatus === "Selected") {
+					applicationStatus = "Selected";
+					isSelected = true;
+				} else if (applyRecord.interviews2) {
+					applicationStatus = "Interview 2";
+				} else if (applyRecord.interviews) {
+					applicationStatus = "Interview";
+				} else if (applyRecord.shortlist) {
+					applicationStatus = "Shortlisted";
+					isShortlisted = true;
+				} else {
+					applicationStatus = "Applied";
+				}
 			}
 		}
 
@@ -461,6 +481,10 @@ jobController.getOneJob = async (req, res) => {
 			data: jobData,
 			isSaved,
 			isApplied,
+			applicationStatus,
+			isRejected,
+			isSelected,
+			isShortlisted,
 		});
 	} catch (error) {
 		console.log("Error in getOneJob:", error);
