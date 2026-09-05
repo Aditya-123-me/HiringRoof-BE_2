@@ -302,6 +302,89 @@ chatController.markAsRead = async (req, res) => {
 	}
 };
 
+// Close conversation room and associated service order if any
+chatController.closeConversation = async (req, res, io) => {
+	try {
+		const { id } = req.params;
+		const serviceModel = require("../models/service.model");
+		const Notification = require("../models/notification.model");
+
+		let conversation = await conversationModel.findOne({
+			$or: [{ _id: mongoose.Types.ObjectId.isValid(id) ? id : null }, { roomId: id }]
+		}).populate("serviceId").populate("userId").populate("hrId");
+
+		if (!conversation) {
+			return res.status(404).json({ status: false, msg: "Conversation room not found!" });
+		}
+
+		conversation.isClosed = true;
+		conversation.closedBy = req.user._id;
+		conversation.closedAt = new Date();
+		await conversation.save();
+
+		// Close associated service if present
+		let targetService = null;
+		if (conversation.serviceId) {
+			targetService = await serviceModel.findByIdAndUpdate(
+				conversation.serviceId._id || conversation.serviceId,
+				{
+					fulfillmentStatus: "COMPLETED",
+					progressPercentage: 100,
+					isClosed: true,
+					closedBy: req.user._id,
+					closedAt: new Date()
+				},
+				{ new: true }
+			);
+		} else {
+			// Find matching active service for client user
+			targetService = await serviceModel.findOneAndUpdate(
+				{ userId: conversation.userId?._id || conversation.userId, fulfillmentStatus: { $ne: "COMPLETED" } },
+				{
+					fulfillmentStatus: "COMPLETED",
+					progressPercentage: 100,
+					isClosed: true,
+					closedBy: req.user._id,
+					closedAt: new Date()
+				},
+				{ new: true, sort: { createdAt: -1 } }
+			);
+		}
+
+		if (io) {
+			const serviceTitle = targetService?.serviceData?.title || targetService?.addonId?.title || "Service Order";
+			const clientUserId = conversation.userId?._id || conversation.userId || targetService?.userId;
+			
+			if (clientUserId) {
+				const clientNotif = await Notification.create({
+					senderType: "adminUser",
+					senderId: req.user._id,
+					receiverId: clientUserId,
+					title: `Service/Chat Closed: ${serviceTitle}`,
+					desc: `Your chat/service "${serviceTitle}" has been completed! Please rate and submit your review.`,
+				});
+				io.emit(`notifications_${clientUserId}`, clientNotif);
+				if (targetService) io.emit(`service_closed_${targetService._id}`, { serviceId: targetService._id, isClosed: true });
+			}
+
+			io.to(conversation.roomId).emit(`chat_closed_${conversation.roomId}`, {
+				roomId: conversation.roomId,
+				isClosed: true,
+				msg: "This conversation room has been closed."
+			});
+		}
+
+		return res.status(200).json({
+			status: true,
+			msg: "Conversation room marked as completed and closed successfully! Chatting is disabled.",
+			data: conversation,
+		});
+	} catch (error) {
+		console.error("Error in chatController.closeConversation:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
 // Fetch unique recruiters assigned to the HR Admin (grouped with their assigned jobs and services)
 chatController.getAssignedRecruiters = async (req, res) => {
 	try {
