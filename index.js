@@ -48,6 +48,12 @@ routeFiles.forEach((routeFile) => {
 });
 
 app.get("/api", (req, res) => res.send({ msg: "HIRING ROOF Backend Server is Running!" }));
+app.get("/api/health-check", (req, res) => res.send({
+	status: true,
+	msg: "HIRING ROOF CI/CD Automated Deployment Successful! 🚀",
+	deployedAt: new Date().toISOString(),
+	branch: "anubhaw"
+}));
 
 server.listen(PORT, function () {
 	console.log(`Server running on port ${PORT}`);
