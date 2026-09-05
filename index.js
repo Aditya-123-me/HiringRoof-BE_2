@@ -35,6 +35,13 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(morgan("common"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/videos", express.static(path.join(__dirname, "videos")));
+router.get("/health-check", (req, res) => res.send({
+	status: true,
+	msg: "HIRING ROOF CI/CD Automated Deployment Successful! 🚀",
+	deployedAt: new Date().toISOString(),
+	branch: "anubhaw"
+}));
+
 app.use("/api", router);
 
 const routesPath = path.join(__dirname, "app/routes");
@@ -48,12 +55,6 @@ routeFiles.forEach((routeFile) => {
 });
 
 app.get("/api", (req, res) => res.send({ msg: "HIRING ROOF Backend Server is Running!" }));
-app.get("/api/health-check", (req, res) => res.send({
-	status: true,
-	msg: "HIRING ROOF CI/CD Automated Deployment Successful! 🚀",
-	deployedAt: new Date().toISOString(),
-	branch: "anubhaw"
-}));
 
 server.listen(PORT, function () {
 	console.log(`Server running on port ${PORT}`);
