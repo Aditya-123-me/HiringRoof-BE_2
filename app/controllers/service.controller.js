@@ -1,6 +1,7 @@
 const serviceModel = require("../models/service.model");
 const convertTo12HourFormat = require("../util/convertTo12HourFormat");
- 
+const createNotification = require("../util/createNotification");
+
 const service = {};
 const today = new Date().toISOString().split("T")[0];
 
@@ -289,14 +290,17 @@ service.updateFulfillmentStatus = async (req, res, io) => {
 
 				if (io && targetService.userId) {
 					const serviceTitle = targetService.serviceData?.title || targetService.addonId?.title || "Service Order";
-					const notif = await Notification.create({
+					const notif = await createNotification({
 						senderType: "adminUser",
+						receiverType: "user",
 						senderId: req.user._id,
 						receiverId: targetService.userId._id || targetService.userId,
 						title: `Service Completed: ${serviceTitle}`,
 						desc: `Your service "${serviceTitle}" has been completed! Please rate and submit your review.`,
 					});
-					io.emit(`notifications_${targetService.userId._id || targetService.userId}`, notif);
+					if (notif?.receiverId?._id) {
+						io.emit(`notifications_${notif.receiverId._id}`, notif);
+					}
 					io.emit(`service_closed_${id}`, { serviceId: id, isClosed: true });
 				}
 			}
@@ -329,7 +333,6 @@ service.closeService = async (req, res, io) => {
 	try {
 		const { id } = req.params;
 		const conversationModel = require("../models/conversation.model");
-		const Notification = require("../models/notification.model");
 
 		const targetService = await serviceModel.findById(id).populate("userId").populate("assignedHR");
 		if (!targetService) {
@@ -353,26 +356,32 @@ service.closeService = async (req, res, io) => {
 			const serviceTitle = targetService.serviceData?.title || targetService.addonId?.title || "Service Order";
 			
 			if (targetService.userId) {
-				const clientNotif = await Notification.create({
+				const clientNotif = await createNotification({
 					senderType: "adminUser",
+					receiverType: "user",
 					senderId: req.user._id,
 					receiverId: targetService.userId._id || targetService.userId,
 					title: `Service Completed: ${serviceTitle}`,
 					desc: `Your service "${serviceTitle}" has been completed! Please rate and submit your review.`,
 				});
-				io.emit(`notifications_${targetService.userId._id || targetService.userId}`, clientNotif);
+				if (clientNotif?.receiverId?._id) {
+					io.emit(`notifications_${clientNotif.receiverId._id}`, clientNotif);
+				}
 				io.emit(`service_closed_${id}`, { serviceId: id, isClosed: true });
 			}
 
 			if (targetService.assignedHR) {
-				const hrNotif = await Notification.create({
+				const hrNotif = await createNotification({
 					senderType: "user",
+					receiverType: "adminUser",
 					senderId: req.user._id,
 					receiverId: targetService.assignedHR._id || targetService.assignedHR,
 					title: `Service Closed: ${serviceTitle}`,
 					desc: `Service order "${serviceTitle}" has been closed/completed.`,
 				});
-				io.emit(`notifications_${targetService.assignedHR._id || targetService.assignedHR}`, hrNotif);
+				if (hrNotif?.receiverId?._id) {
+					io.emit(`notifications_${hrNotif.receiverId._id}`, hrNotif);
+				}
 			}
 
 			if (conversation && conversation.roomId) {

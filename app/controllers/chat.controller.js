@@ -4,6 +4,7 @@ const messageModel = require("../models/message.model");
 const jobModel = require("../models/job.model");
 const adminUserModel = require("../models/adminUser.model");
 const userModel = require("../models/user.model");
+const createNotification = require("../util/createNotification");
 
 const chatController = {};
 
@@ -356,14 +357,17 @@ chatController.closeConversation = async (req, res, io) => {
 			const clientUserId = conversation.userId?._id || conversation.userId || targetService?.userId;
 			
 			if (clientUserId) {
-				const clientNotif = await Notification.create({
+				const clientNotif = await createNotification({
 					senderType: "adminUser",
+					receiverType: "user",
 					senderId: req.user._id,
 					receiverId: clientUserId,
 					title: `Service/Chat Closed: ${serviceTitle}`,
 					desc: `Your chat/service "${serviceTitle}" has been completed! Please rate and submit your review.`,
 				});
-				io.emit(`notifications_${clientUserId}`, clientNotif);
+				if (clientNotif?.receiverId?._id) {
+					io.emit(`notifications_${clientNotif.receiverId._id}`, clientNotif);
+				}
 				if (targetService) io.emit(`service_closed_${targetService._id}`, { serviceId: targetService._id, isClosed: true });
 			}
 
