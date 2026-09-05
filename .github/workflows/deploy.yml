@@ -40,6 +40,7 @@ jobs:
               git remote add origin https://github.com/Aditya-123-me/HiringRoof-BE_2.git || git remote set-url origin https://github.com/Aditya-123-me/HiringRoof-BE_2.git
             fi
             git fetch origin anubhaw
+            git reset --hard origin/anubhaw
             git checkout -B anubhaw origin/anubhaw
             git pull origin anubhaw
             npm install --omit=dev
