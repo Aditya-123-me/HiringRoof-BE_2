@@ -285,8 +285,8 @@ userController.user = async (req, res) => {
 		}
 
 		let extraData = null;
-		// Add extra detailed analytics for Super Admin (req.user.type === "admin", "superAdmin", "superadmin", or "sub-admin")
-		if (req.user && ["admin", "superAdmin", "superadmin", "sub-admin"].includes(req.user.type)) {
+		// Add extra detailed analytics for Super Admin & HR (req.user.type === "admin", "superAdmin", "superadmin", "sub-admin", or "hr")
+		if (req.user && ["admin", "superAdmin", "superadmin", "sub-admin", "hr"].includes(req.user.type)) {
 			if (formattedRecord.userType === "jobSeeker") {
 				const JobApplication = require("../models/jobApplication.model");
 				// Fetch all job applications for this candidate
@@ -452,6 +452,64 @@ userController.user = async (req, res) => {
 	}
 };
 
+const attachPurchasedServicesToUsers = async (usersList) => {
+	if (!Array.isArray(usersList) || usersList.length === 0) return usersList;
+
+	try {
+		const userIds = usersList.map((u) => u._id);
+		const serviceModel = require("../models/service.model");
+
+		const services = await serviceModel
+			.find({ userId: { $in: userIds } })
+			.populate("addonId")
+			.populate("assignedHR", "name email phone profileImage")
+			.sort({ createdAt: -1 })
+			.lean();
+
+		const servicesMap = {};
+		services.forEach((s) => {
+			if (!s.userId) return;
+			const uid = s.userId.toString();
+			if (!servicesMap[uid]) servicesMap[uid] = [];
+			servicesMap[uid].push({
+				_id: s._id,
+				title: s.addonId?.title || s.serviceData?.title || "Addon Service",
+				addonId: s.addonId?._id || null,
+				totalAmount: s.totalAmount || 0,
+				fulfillmentStatus: s.fulfillmentStatus || "UNASSIGNED",
+				progressPercentage: s.progressPercentage || 0,
+				workDone: s.workDone || [],
+				workPending: s.workPending || [],
+				isClosed: s.isClosed || false,
+				date: s.date || "",
+				expireDate: s.expireDate || "",
+				rating: s.rating || 0,
+				reviewText: s.reviewText || "",
+				assignedHR: s.assignedHR || null,
+			});
+		});
+
+		return usersList.map((user) => {
+			const userServices = servicesMap[user._id.toString()] || [];
+			const activeServices = userServices.filter((s) => !s.isClosed && s.fulfillmentStatus !== "COMPLETED");
+			const totalSpent = userServices.reduce((sum, s) => sum + (s.totalAmount || 0), 0);
+
+			return {
+				...user,
+				purchasedServices: userServices,
+				activeServices,
+				totalServicesCount: userServices.length,
+				activeServicesCount: activeServices.length,
+				hasActiveService: activeServices.length > 0,
+				totalSpent,
+			};
+		});
+	} catch (err) {
+		console.error("Error in attachPurchasedServicesToUsers:", err.message);
+		return usersList;
+	}
+};
+
 userController.users = async (req, res) => {
 	try {
 		res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
@@ -530,6 +588,8 @@ userController.users = async (req, res) => {
 				return user;
 			});
 		}
+
+		users = await attachPurchasedServicesToUsers(users);
 
 		return res.status(200).json({
 			status: true,
@@ -620,6 +680,8 @@ userController.jobSeeker = async (req, res) => {
 			});
 		}
 
+		users = await attachPurchasedServicesToUsers(users);
+
 		return res.status(200).json({
 			status: true,
 			msg: "Data fetched successfully !!",
@@ -645,8 +707,10 @@ userController.company = async (req, res) => {
 			sort: { createdAt: -1 },
 		};
 
-		const users = await User.find({ userType: { $ne: "jobSeeker" } }, null, options);
+		let users = await User.find({ userType: { $ne: "jobSeeker" } }, null, options).lean();
 		const totalUser = await User.countDocuments({ userType: { $ne: "jobSeeker" } });
+
+		users = await attachPurchasedServicesToUsers(users);
 
 		return res.status(200).json({
 			status: true,
