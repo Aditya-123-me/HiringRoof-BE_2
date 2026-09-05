@@ -35,7 +35,8 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(morgan("common"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/videos", express.static(path.join(__dirname, "videos")));
-router.get("/health-check", (req, res) => res.send({
+
+app.get("/api/health-check", (req, res) => res.send({
 	status: true,
 	msg: "HIRING ROOF CI/CD Automated Deployment Successful! 🚀",
 	deployedAt: new Date().toISOString(),
