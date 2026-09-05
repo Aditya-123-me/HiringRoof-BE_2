@@ -36,15 +36,6 @@ app.use(morgan("common"));
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/videos", express.static(path.join(__dirname, "videos")));
 
-app.get("/api/health-check", (req, res) => res.send({
-	status: true,
-	msg: "HIRING ROOF CI/CD Automated Deployment Successful! 🚀",
-	deployedAt: new Date().toISOString(),
-	branch: "anubhaw"
-}));
-
-app.use("/api", router);
-
 const routesPath = path.join(__dirname, "app/routes");
 const routeFiles = fs.readdirSync(routesPath);
 
@@ -55,6 +46,7 @@ routeFiles.forEach((routeFile) => {
 	}
 });
 
+app.use("/api", router);
 app.get("/api", (req, res) => res.send({ msg: "HIRING ROOF Backend Server is Running!" }));
 
 server.listen(PORT, function () {
