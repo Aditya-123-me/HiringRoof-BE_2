@@ -37,8 +37,8 @@ jobs:
             if [ ! -d ".git" ]; then
               echo "Initializing git repository on server..."
               git init
-              git remote add origin https://github.com/Aditya-123-me/HiringRoof-BE_2.git || git remote set-url origin https://github.com/Aditya-123-me/HiringRoof-BE_2.git
             fi
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Aditya-123-me/HiringRoof-BE_2.git || git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Aditya-123-me/HiringRoof-BE_2.git
             git fetch origin anubhaw
             git reset --hard origin/anubhaw
             git checkout -B anubhaw origin/anubhaw
