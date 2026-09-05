@@ -32,6 +32,7 @@ jobs:
           script: |
             set -e
             echo "🚀 Deploying Backend (anubhaw branch) to /var/www/html/hiringroof-backend..."
+            git config --global --add safe.directory /var/www/html/hiringroof-backend || true
             mkdir -p /var/www/html/hiringroof-backend
             cd /var/www/html/hiringroof-backend
             if [ ! -d ".git" ]; then
