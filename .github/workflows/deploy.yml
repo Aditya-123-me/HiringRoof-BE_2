@@ -45,7 +45,7 @@ jobs:
             git checkout -B anubhaw origin/anubhaw
             git pull origin anubhaw
             npm install --omit=dev
-            pm2 delete hiringroof-backend || true
-            pm2 start index.js --name "hiringroof-backend"
+            pm2 delete hiringroof-backend hiringroof-backend-new || true
+            pm2 start index.js -i max --name "hiringroof-backend"
             pm2 save
             echo "✅ Backend Deployment Complete!"
