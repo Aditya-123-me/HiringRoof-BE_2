@@ -29,9 +29,15 @@ const drive = google.drive({ version: "v3", auth: oauth2Client });
  */
 const imageUpload = async (imageData, name, folderName) => {
 	try {
-		// 1. Create a readable stream from the buffer
+		// 1. Create a readable stream from the buffer (handling ArrayBuffer & Buffer safely)
+		let rawBuf = (imageData && imageData.buffer) ? imageData.buffer : imageData;
+		if (rawBuf instanceof ArrayBuffer) {
+			rawBuf = Buffer.from(rawBuf);
+		} else if (!Buffer.isBuffer(rawBuf)) {
+			rawBuf = Buffer.from(rawBuf);
+		}
 		const bufferStream = new stream.PassThrough();
-		bufferStream.end(imageData.buffer);
+		bufferStream.end(rawBuf);
 
 		const extension = imageData.originalname.split(".").pop();
 		const finalFileName = `${name}.${extension}`;
