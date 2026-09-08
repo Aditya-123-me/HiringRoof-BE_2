@@ -3,6 +3,7 @@ const app = express();
 const helmet = require("helmet");
 var cors = require("cors");
 const morgan = require("morgan");
+const compression = require("compression");
 const router = express.Router();
 require("dotenv").config();
 const connectDB = require("./app/config/mongodb.config");
@@ -29,6 +30,7 @@ const corsOptions = {
 	optionsSuccessStatus: 200,
 };
 
+app.use(compression());
 app.use(cors(corsOptions));
 app.use(express.json());
 app.use(helmet({ crossOriginResourcePolicy: false }));
