@@ -5,7 +5,7 @@ This document describes the API endpoints, HTTP methods, request bodies, query p
 ---
 
 ## Base Path
-All endpoints are mounted under Express router prefix:
+All endpoints :
 ```
 /api
 ```
