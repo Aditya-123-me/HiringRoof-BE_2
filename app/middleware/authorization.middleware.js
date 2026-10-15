@@ -7,15 +7,30 @@ const { JWT_SECRET } = require("../config/config");
 const authorization = async (req, res, next) => {
 	try {
 		let token = req.headers["authorization"] || req.query.token || req.query.auth;
-		if (token && token.startsWith("Bearer ")) {
-			token = token.slice(7).trim();
+		if (token && typeof token === "string") {
+			token = token.replace(/^["']|["']$/g, "").trim();
+			if (token.startsWith("Bearer ")) {
+				token = token.slice(7).replace(/^["']|["']$/g, "").trim();
+			}
 		}
 
-		if (!token) return res.status(200).send({ success: false, msg: "A token is required for authentication !!" });
+		if (!token) return res.status(401).send({ status: false, msg: "A token is required for authentication !!" });
 
 		const verify = jwt.verify(token, JWT_SECRET);
 
-		req.user = (await User.findById(verify._id).select("-otp")) || (await adminUser.findById(verify._id)) || (await subAdminUser.findById(verify._id));
+		const foundUser = await User.findById(verify._id).select("-otp");
+		if (foundUser) {
+			if (foundUser.isDeleted) {
+				return res.status(401).json({
+					status: false,
+					msg: "This account has been deleted.",
+					isDeleted: true,
+				});
+			}
+			req.user = foundUser;
+		} else {
+			req.user = (await adminUser.findById(verify._id)) || (await subAdminUser.findById(verify._id));
+		}
 
 		if (req.user) next();
 		else

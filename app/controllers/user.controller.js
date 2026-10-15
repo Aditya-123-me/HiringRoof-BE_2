@@ -99,6 +99,13 @@ userController.login = async (req, res) => {
 				}
 			}
 
+			if (findNumber.isDeleted)
+				return res.status(403).send({
+					status: false,
+					msg: "This account has been deleted. Please contact support to restore your account.",
+					isDeleted: true,
+				});
+
 			if (findNumber.blocked_status)
 				return res.status(404).send({
 					status: false,
@@ -135,6 +142,14 @@ userController.verify = async (req, res, io) => {
 
 		const findNumber = await User.findOne({ phone, otp });
 		if (!findNumber) return res.status(401).send({ status: false, msg: "Phone or OTP is wrong, Please try again !!" });
+
+		if (findNumber.isDeleted) {
+			return res.status(403).send({
+				status: false,
+				msg: "This account has been deleted. Please contact support to restore your account.",
+				isDeleted: true,
+			});
+		}
 
 		const isRecruiterRole = (r) => ["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(r);
 		const isCandidateRole = (r) => r === "jobSeeker";
@@ -222,26 +237,264 @@ userController.verify = async (req, res, io) => {
 	}
 };
 
-userController.delete = async (req, res) => {
-	try {
-		const { _id } = req.params;
+// ---------------------------------------------------
+// USER DELETION & RESTORATION CONTROLLERS
+// ---------------------------------------------------
 
-		const userRecord = await User.findOne({ _id });
-		if (!userRecord)
-			return res.status(404).send({
-				status: true,
+// Soft Delete User
+userController.softDelete = async (req, res) => {
+	try {
+		const _id = req.params._id || req.params.id;
+		const { reason } = req.body || {};
+
+		const userRecord = await User.findById(_id);
+		if (!userRecord) {
+			return res.status(404).json({
+				status: false,
 				msg: "Invalid User !!",
 			});
+		}
 
-		await User.deleteOne({ _id });
+		// Authorization check: User can delete their own account, or an admin/superAdmin/sub-admin/hr can delete it
+		const isSelf = req.user && req.user._id && req.user._id.toString() === _id.toString();
+		const userRole = String(req.user?.type || req.user?.userType || "").toLowerCase();
+		const isAdmin = req.user && (["admin", "superadmin", "super-admin", "sub-admin", "subadmin", "hr"].includes(userRole) || Boolean(req.user?.permissions));
+		if (!isSelf && !isAdmin) {
+			return res.status(403).json({
+				status: false,
+				msg: "You are not authorized to delete this user !!",
+			});
+		}
 
-		return res.status(200).send({
+		if (userRecord.isDeleted) {
+			return res.status(400).json({
+				status: false,
+				msg: "User is already soft-deleted !!",
+				data: userRecord,
+			});
+		}
+
+		const updatedUser = await User.findByIdAndUpdate(
+			_id,
+			{
+				$set: {
+					isDeleted: true,
+					deletedAt: new Date(),
+					deletedBy: req.user ? req.user._id : null,
+					deleteType: "soft",
+					deleteReason: reason || "User account soft-deleted",
+				},
+			},
+			{ new: true }
+		);
+
+		// If user is recruiter, also soft-delete their active posted jobs
+		if (["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(userRecord.userType)) {
+			const Job = require("../models/job.model");
+			await Job.updateMany(
+				{ userId: _id, isDeleted: false },
+				{
+					$set: {
+						isDeleted: true,
+						isActive: false,
+						deletedAt: new Date(),
+						deletedBy: req.user ? req.user._id : null,
+						deleteType: "soft",
+						deleteReason: "Recruiter account soft-deleted",
+					},
+				}
+			);
+		}
+
+		return res.status(200).json({
 			status: true,
-			msg: "User deleted successfully !!",
+			msg: "User soft deleted successfully !!",
+			data: updatedUser,
 		});
 	} catch (error) {
-		console.log(error);
-		res.status(500).send({ status: false, msg: error.message });
+		console.error("Error in softDelete user:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+// Hard Delete User (Permanently Delete + Cascading cleanups)
+userController.hardDelete = async (req, res) => {
+	try {
+		const _id = req.params._id || req.params.id;
+
+		const userRecord = await User.findById(_id);
+		if (!userRecord) {
+			return res.status(404).json({
+				status: false,
+				msg: "Invalid User !!",
+			});
+		}
+
+		// Authorization check: User can delete their own account, or an admin/superAdmin/sub-admin/hr can delete it
+		const isSelf = req.user && req.user._id && req.user._id.toString() === _id.toString();
+		const userRole = String(req.user?.type || req.user?.userType || "").toLowerCase();
+		const isAdmin = req.user && (["admin", "superadmin", "super-admin", "sub-admin", "subadmin", "hr"].includes(userRole) || Boolean(req.user?.permissions));
+		if (!isSelf && !isAdmin) {
+			return res.status(403).json({
+				status: false,
+				msg: "You are not authorized to delete this user !!",
+			});
+		}
+
+		// Cascading cleanups across associated collections
+		const JobApplication = require("../models/jobApplication.model");
+		const Save = require("../models/save.model");
+		const Job = require("../models/job.model");
+		const Notification = require("../models/notification.model");
+		const Service = require("../models/service.model");
+		const adminUserModel = require("../models/adminUser.model");
+
+		// 1. Delete applications where this user was the applicant
+		await JobApplication.deleteMany({ applicantId: _id });
+
+		// 2. Delete saves where this user saved jobs
+		await Save.deleteMany({ userId: _id });
+
+		// 3. If recruiter, delete all posted jobs and their related applications, saves, and HR target assignments
+		const postedJobs = await Job.find({ userId: _id }).select("_id");
+		if (postedJobs.length > 0) {
+			const postedJobIds = postedJobs.map((j) => j._id);
+			await JobApplication.deleteMany({ jobId: { $in: postedJobIds } });
+			await Save.updateMany({}, { $pull: { jobId: { $in: postedJobIds } } });
+			await adminUserModel.updateMany(
+				{ "jobTarget.jobIds.jobId": { $in: postedJobIds } },
+				{ $pull: { "jobTarget.$[].jobIds": { jobId: { $in: postedJobIds } } } }
+			);
+			await Job.deleteMany({ userId: _id });
+		}
+
+		// 4. Delete notifications sent or received by this user
+		await Notification.deleteMany({ $or: [{ senderId: _id }, { receiverId: _id }] });
+
+		// 5. Delete services/orders by this user
+		await Service.deleteMany({ userId: _id });
+
+		// 6. Permanently delete the user document
+		const deletedUser = await User.findByIdAndDelete(_id);
+
+		return res.status(200).json({
+			status: true,
+			msg: "User permanently deleted successfully !!",
+			data: deletedUser,
+		});
+	} catch (error) {
+		console.error("Error in hardDelete user:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+// Generic Delete User (Supports ?type=hard for hard delete, defaults to soft delete)
+userController.delete = async (req, res) => {
+	const deleteType = req.query.type || req.body?.type;
+	if (deleteType === "hard" || deleteType === "permanent") {
+		return userController.hardDelete(req, res);
+	}
+	return userController.softDelete(req, res);
+};
+
+// Restore User
+userController.restoreUser = async (req, res) => {
+	try {
+		const _id = req.params._id || req.params.id;
+
+		const userRecord = await User.findById(_id);
+		if (!userRecord) {
+			return res.status(404).json({
+				status: false,
+				msg: "Invalid User !!",
+			});
+		}
+
+		const userRole = String(req.user?.type || req.user?.userType || "").toLowerCase();
+		const isAdmin = req.user && (["admin", "superadmin", "super-admin", "sub-admin", "subadmin", "hr"].includes(userRole) || Boolean(req.user?.permissions));
+		if (!isAdmin) {
+			return res.status(403).json({
+				status: false,
+				msg: "Only administrators can restore a deleted user !!",
+			});
+		}
+
+		const restoredUser = await User.findByIdAndUpdate(
+			_id,
+			{
+				$set: {
+					isDeleted: false,
+					deletedAt: null,
+					deletedBy: null,
+					deleteType: "",
+					deleteReason: "",
+				},
+			},
+			{ new: true }
+		);
+
+		// If recruiter, restore jobs that were soft-deleted with recruiter account
+		if (["companyRecruiter", "individualRecruiter", "company", "recruiter"].includes(userRecord.userType)) {
+			const Job = require("../models/job.model");
+			await Job.updateMany(
+				{ userId: _id, isDeleted: true, deleteReason: "Recruiter account soft-deleted" },
+				{
+					$set: {
+						isDeleted: false,
+						isActive: true,
+						deletedAt: null,
+						deletedBy: null,
+						deleteType: "",
+						deleteReason: "",
+					},
+				}
+			);
+		}
+
+		return res.status(200).json({
+			status: true,
+			msg: "User restored successfully !!",
+			data: restoredUser,
+		});
+	} catch (error) {
+		console.error("Error in restoreUser:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+// Get Deleted Users
+userController.getDeletedUsers = async (req, res) => {
+	try {
+		const page = parseInt(req.query.page) >= 1 ? parseInt(req.query.page) : 1;
+		const limit = parseInt(req.query.limit) >= 1 ? parseInt(req.query.limit) : 25;
+		const skip = (page - 1) * limit;
+
+		const filter = { isDeleted: true };
+		if (req.query.type) filter.userType = req.query.type;
+		if (req.query.search) {
+			const regex = new RegExp(req.query.search.trim(), "i");
+			filter.$or = [{ name: regex }, { email: regex }, { phone: regex }, { companyName: regex }];
+		}
+
+		const totalUser = await User.countDocuments(filter);
+		const users = await User.find(filter)
+			.sort({ deletedAt: -1, updatedAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.populate("deletedBy", "name email type")
+			.lean();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Deleted users fetched successfully !!",
+			totalUser,
+			totalPage: Math.ceil(totalUser / limit) || 1,
+			currentPage: page,
+			data: users,
+		});
+	} catch (error) {
+		console.error("Error in getDeletedUsers:", error);
+		return res.status(500).json({ status: false, msg: error.message });
 	}
 };
 
@@ -527,6 +780,7 @@ userController.users = async (req, res) => {
 
 		const filter = {};
 		if (req.query.type) filter.userType = req.query.type;
+		filter.isDeleted = req.query.isDeleted === "true" ? true : { $ne: true };
 
 		if (req.user && req.user.type === "hr") {
 			const assignedJobIds = req.user?.jobTarget?.reduce((acc, target) => {
@@ -616,7 +870,7 @@ userController.jobSeeker = async (req, res) => {
 			sort: { createdAt: -1 },
 		};
 
-		const filters = { userType: "jobSeeker" };
+		const filters = { userType: "jobSeeker", isDeleted: { $ne: true } };
 		if (req.user && req.user.type === "hr") {
 			const JobApplication = require("../models/jobApplication.model");
 			const assignedJobIds = req.user?.jobTarget?.reduce((acc, target) => {
@@ -707,8 +961,8 @@ userController.company = async (req, res) => {
 			sort: { createdAt: -1 },
 		};
 
-		let users = await User.find({ userType: { $ne: "jobSeeker" } }, null, options).lean();
-		const totalUser = await User.countDocuments({ userType: { $ne: "jobSeeker" } });
+		let users = await User.find({ userType: { $ne: "jobSeeker" }, isDeleted: { $ne: true } }, null, options).lean();
+		const totalUser = await User.countDocuments({ userType: { $ne: "jobSeeker" }, isDeleted: { $ne: true } });
 
 		users = await attachPurchasedServicesToUsers(users);
 
@@ -1300,6 +1554,7 @@ userController.getUserIntroVideos = async (req, res) => {
 		// Strictly candidates (jobSeeker) with non-empty videoUrl
 		const query = {
 			userType: "jobSeeker",
+			isDeleted: { $ne: true },
 			videoUrl: { $exists: true, $ne: "", $regex: /\S/ }
 		};
 

@@ -437,6 +437,14 @@ jobController.getOneJob = async (req, res) => {
 			return res.status(404).json({ status: false, msg: "Job not found!" });
 		}
 
+		if (jobData.isDeleted) {
+			const isOwner = req.user && jobData.userId && req.user._id && jobData.userId._id.toString() === req.user._id.toString();
+			const isAdmin = req.user && ["admin", "superAdmin", "superadmin", "sub-admin", "hr"].includes(req.user.type);
+			if (!isOwner && !isAdmin) {
+				return res.status(404).json({ status: false, msg: "Job not found or has been deleted!" });
+			}
+		}
+
 		let isSaved = false;
 		let isApplied = false;
 		let applicationStatus = null;
@@ -600,17 +608,209 @@ jobController.search = async (req, res) => {
 	}
 };
 
-jobController.delete = async (req, res) => {
+// ---------------------------------------------------
+// JOB POST DELETION & RESTORATION CONTROLLERS
+// ---------------------------------------------------
+
+// Soft Delete Job Post
+jobController.softDelete = async (req, res) => {
 	try {
-		const { _id } = req.params;
-		const findJob = await Job.findById({ _id });
-		if (!findJob) return res.status(404).send({ status: false, msg: "No job found, please check your id !!" });
+		const _id = req.params._id || req.params.id;
+		const { reason } = req.body || {};
 
-		const deleteOne = await Job.findByIdAndUpdate({ _id }, { isDeleted: true }, { new: true }).populate("userId", { name: 1, email: 1, phone: 1 });
+		const findJob = await Job.findById(_id);
+		if (!findJob) return res.status(404).json({ status: false, msg: "No job found, please check your id !!" });
 
-		return res.status(200).send({ status: true, msg: "One job deleted !!", data: deleteOne });
+		// Authorization check: Job owner OR admin/superAdmin/sub-admin/hr
+		const isOwner = req.user && findJob.userId && req.user._id && findJob.userId.toString() === req.user._id.toString();
+		const userRole = String(req.user?.type || req.user?.userType || "").toLowerCase();
+		const isAdmin = req.user && (["admin", "superadmin", "super-admin", "sub-admin", "subadmin", "hr"].includes(userRole) || Boolean(req.user?.permissions));
+		if (!isOwner && !isAdmin) {
+			return res.status(403).json({
+				status: false,
+				msg: "You are not authorized to delete this job post !!",
+			});
+		}
+
+		if (findJob.isDeleted) {
+			return res.status(400).json({
+				status: false,
+				msg: "Job post is already soft-deleted !!",
+				data: findJob,
+			});
+		}
+
+		const deleteOne = await Job.findByIdAndUpdate(
+			_id,
+			{
+				$set: {
+					isDeleted: true,
+					isActive: false,
+					deletedAt: new Date(),
+					deletedBy: req.user ? req.user._id : null,
+					deleteType: "soft",
+					deleteReason: reason || "Job post soft-deleted",
+				},
+			},
+			{ new: true }
+		).populate("userId", { name: 1, email: 1, phone: 1 });
+
+		return res.status(200).json({ status: true, msg: "Job post soft deleted successfully !!", data: deleteOne });
 	} catch (error) {
-		return res.status(500).send({ status: false, msg: error.message });
+		console.error("Error in softDelete job:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+// Hard Delete Job Post (Permanently Delete + Cascading cleanups)
+jobController.hardDelete = async (req, res) => {
+	try {
+		const _id = req.params._id || req.params.id;
+
+		const findJob = await Job.findById(_id);
+		if (!findJob) return res.status(404).json({ status: false, msg: "No job found, please check your id !!" });
+
+		// Authorization check: Job owner OR admin/superAdmin/sub-admin/hr
+		const isOwner = req.user && findJob.userId && req.user._id && findJob.userId.toString() === req.user._id.toString();
+		const userRole = String(req.user?.type || req.user?.userType || "").toLowerCase();
+		const isAdmin = req.user && (["admin", "superadmin", "super-admin", "sub-admin", "subadmin", "hr"].includes(userRole) || Boolean(req.user?.permissions));
+		if (!isOwner && !isAdmin) {
+			return res.status(403).json({
+				status: false,
+				msg: "You are not authorized to delete this job post !!",
+			});
+		}
+
+		// Cascading cleanups
+		const JobApplication = require("../models/jobApplication.model");
+		const Save = require("../models/save.model");
+		const adminUserModel = require("../models/adminUser.model");
+		const userModel = require("../models/user.model");
+
+		// 1. Delete all job applications for this job post
+		await JobApplication.deleteMany({ jobId: _id });
+
+		// 2. Remove job from user saved lists
+		await Save.updateMany({}, { $pull: { jobId: _id } });
+
+		// 3. Remove job from HR target assignments
+		await adminUserModel.updateMany(
+			{ "jobTarget.jobIds.jobId": _id },
+			{ $pull: { "jobTarget.$[].jobIds": { jobId: _id } } }
+		);
+
+		// 4. Remove from user candidate selectedIn array
+		await userModel.updateMany(
+			{ "selectedIn.job": _id },
+			{ $pull: { selectedIn: { job: _id } } }
+		);
+
+		// 5. Permanently delete the job document
+		const deletedJob = await Job.findByIdAndDelete(_id);
+
+		return res.status(200).json({
+			status: true,
+			msg: "Job post permanently deleted successfully !!",
+			data: deletedJob,
+		});
+	} catch (error) {
+		console.error("Error in hardDelete job:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+// Generic Delete Job (Supports ?type=hard for hard delete, defaults to soft delete)
+jobController.delete = async (req, res) => {
+	const deleteType = req.query.type || req.body?.type;
+	if (deleteType === "hard" || deleteType === "permanent") {
+		return jobController.hardDelete(req, res);
+	}
+	return jobController.softDelete(req, res);
+};
+
+// Restore Job Post
+jobController.restoreJob = async (req, res) => {
+	try {
+		const _id = req.params._id || req.params.id;
+
+		const findJob = await Job.findById(_id);
+		if (!findJob) return res.status(404).json({ status: false, msg: "No job found, please check your id !!" });
+
+		const isOwner = req.user && findJob.userId && req.user._id && findJob.userId.toString() === req.user._id.toString();
+		const userRole = String(req.user?.type || req.user?.userType || "").toLowerCase();
+		const isAdmin = req.user && (["admin", "superadmin", "super-admin", "sub-admin", "subadmin", "hr"].includes(userRole) || Boolean(req.user?.permissions));
+		if (!isOwner && !isAdmin) {
+			return res.status(403).json({
+				status: false,
+				msg: "You are not authorized to restore this job post !!",
+			});
+		}
+
+		const restoredJob = await Job.findByIdAndUpdate(
+			_id,
+			{
+				$set: {
+					isDeleted: false,
+					isActive: true,
+					deletedAt: null,
+					deletedBy: null,
+					deleteType: "",
+					deleteReason: "",
+				},
+			},
+			{ new: true }
+		).populate("userId", { name: 1, email: 1, phone: 1 });
+
+		return res.status(200).json({
+			status: true,
+			msg: "Job post restored successfully !!",
+			data: restoredJob,
+		});
+	} catch (error) {
+		console.error("Error in restoreJob:", error);
+		return res.status(500).json({ status: false, msg: error.message });
+	}
+};
+
+// Get Deleted Job Posts
+jobController.getDeletedJobs = async (req, res) => {
+	try {
+		const page = parseInt(req.query.page) >= 1 ? parseInt(req.query.page) : 1;
+		const limit = parseInt(req.query.limit) >= 1 ? parseInt(req.query.limit) : 10;
+		const skip = (page - 1) * limit;
+
+		const filter = { isDeleted: true };
+		// If recruiter, only see their own deleted jobs
+		const isAdmin = req.user && ["admin", "superAdmin", "superadmin", "sub-admin", "hr"].includes(req.user.type);
+		if (!isAdmin && req.user && req.user._id) {
+			filter.userId = req.user._id;
+		}
+
+		if (req.query.search) {
+			const regex = new RegExp(req.query.search.trim(), "i");
+			filter.$or = [{ jobTittle: regex }, { companyName: regex }, { location: regex }];
+		}
+
+		const totalCount = await Job.countDocuments(filter);
+		const jobs = await Job.find(filter)
+			.sort({ deletedAt: -1, updatedAt: -1 })
+			.skip(skip)
+			.limit(limit)
+			.populate("userId", "name email phone companyName")
+			.populate("deletedBy", "name email type")
+			.lean();
+
+		return res.status(200).json({
+			status: true,
+			msg: "Deleted jobs fetched successfully !!",
+			totalCount,
+			pageCount: Math.ceil(totalCount / limit) || 1,
+			currentPage: page,
+			data: jobs,
+		});
+	} catch (error) {
+		console.error("Error in getDeletedJobs:", error);
+		return res.status(500).json({ status: false, msg: error.message });
 	}
 };
 

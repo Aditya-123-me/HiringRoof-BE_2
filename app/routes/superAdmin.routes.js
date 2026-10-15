@@ -1,4 +1,5 @@
 const jobController = require("../controllers/job.controller");
+const userController = require("../controllers/user.controller");
 const superAdmin = require("../controllers/superAdmin.controller");
 const adminAuthorization = require("../middleware/adminAuthorization.middleware");
 const upload = require("../middleware/multer.middleware");
@@ -36,4 +37,17 @@ module.exports = (router, io) => {
 	router.post("/superAdmin/getCandidateAnalytics", adminAuthorization, superAdmin.getCandidateAnalytics);
 	router.get("/superAdmin/getCandidateAnalytics", adminAuthorization, superAdmin.getCandidateAnalytics);
 	router.get("/superAdmin/getCandidateAnalytics/:userId", adminAuthorization, superAdmin.getCandidateAnalytics);
+
+	// Super Admin User & Job Deletion & Restoration APIs
+	router.delete("/superAdmin/user/soft-delete/:id", adminAuthorization, userController.softDelete);
+	router.delete("/superAdmin/user/hard-delete/:id", adminAuthorization, userController.hardDelete);
+	router.delete("/superAdmin/user/permanently-delete/:id", adminAuthorization, userController.hardDelete);
+	router.put("/superAdmin/user/restore/:id", adminAuthorization, userController.restoreUser);
+	router.get("/superAdmin/deleted-users", adminAuthorization, userController.getDeletedUsers);
+
+	router.delete("/superAdmin/job/soft-delete/:id", adminAuthorization, jobController.softDelete);
+	router.delete("/superAdmin/job/hard-delete/:id", adminAuthorization, jobController.hardDelete);
+	router.delete("/superAdmin/job/permanently-delete/:id", adminAuthorization, jobController.hardDelete);
+	router.put("/superAdmin/job/restore/:id", adminAuthorization, jobController.restoreJob);
+	router.get("/superAdmin/deleted-jobs", adminAuthorization, jobController.getDeletedJobs);
 };

@@ -9,6 +9,11 @@ module.exports = (router, io) => {
 	router.put("/user/verify", (req, res) => userController.verify(req, res, io));
 
 	router.delete("/user/delete/:_id", authorization, userController.delete);
+	router.delete("/user/soft-delete/:_id", authorization, userController.softDelete);
+	router.delete("/user/hard-delete/:_id", authorization, userController.hardDelete);
+	router.delete("/user/permanently-delete/:_id", authorization, userController.hardDelete);
+	router.put("/user/restore/:_id", adminAuthorization, userController.restoreUser);
+	router.get("/user/deleted-users", adminAuthorization, userController.getDeletedUsers);
 
 	router.get("/user/user", authorization, userController.user);
 

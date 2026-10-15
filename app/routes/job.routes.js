@@ -25,6 +25,11 @@ module.exports = (router, io) => {
 	router.get("/job/search/:query", authorization2nd, jobController.search);
 
 	router.delete("/job/delete/:_id", authorization, jobController.delete);
+	router.delete("/job/soft-delete/:_id", authorization, jobController.softDelete);
+	router.delete("/job/hard-delete/:_id", authorization, jobController.hardDelete);
+	router.delete("/job/permanently-delete/:_id", authorization, jobController.hardDelete);
+	router.put("/job/restore/:_id", authorization, jobController.restoreJob);
+	router.get("/job/deleted-jobs", authorization, jobController.getDeletedJobs);
 
 	router.get("/job/myJobs/:page", authorization, jobController.myJobs);
 	router.get("/job/my-pending-addons", authorization, jobController.myPendingAddons);

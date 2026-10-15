@@ -1030,10 +1030,15 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 		page = parseInt(page) || 1;
 		limit = parseInt(limit) || 50;
 
-		// 1. Fetch All Active & Non-deleted Jobs with populated recruiter (userId) and assignedHR
-		const jobQuery = { isDeleted: { $ne: true } };
-		if (status === "active") jobQuery.isActive = true;
-		else if (status === "expired") jobQuery.isActive = false;
+		// 1. Fetch Jobs with populated recruiter (userId) and assignedHR
+		const jobQuery = {};
+		if (status === "deleted") {
+			jobQuery.isDeleted = true;
+		} else {
+			jobQuery.isDeleted = { $ne: true };
+			if (status === "active") jobQuery.isActive = true;
+			else if (status === "expired") jobQuery.isActive = false;
+		}
 
 		if (serviceType && serviceType !== "all") {
 			jobQuery.serviceType = serviceType;
@@ -1263,6 +1268,7 @@ superAdmin.getCompleteAnalytics = async (req, res) => {
 				experience: job.experience,
 				serviceType: job.serviceType || "Standard",
 				isActive: job.isActive,
+				isDeleted: Boolean(job.isDeleted),
 				isPaymentSuccess: job.isPaymentSuccess || false,
 				expireDate: job.expireDate || null,
 				createdAt: job.createdAt,
