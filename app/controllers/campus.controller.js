@@ -11,7 +11,7 @@ const {
 
 const campusController = {};
 
-// Default initial seed data helper if database is currently empty
+// Default initial seed data helper if database is empty
 const seedDefaultDataIfEmpty = async () => {
 	try {
 		if (mongoose.connection.readyState !== 1) {
@@ -105,7 +105,7 @@ const seedDefaultDataIfEmpty = async () => {
 					industry: "IT Services & Digital Transformation",
 					website: "https://tcs.com/careers",
 					location: "Pan India",
-					hrLeadName: "Sanjay Nambiar",
+					hrLeadName: "Sanjay Srivastav",
 					hrEmail: "campus.connect@tcs.com",
 					hrPhone: "+91 98765 43210",
 					expectedHires: 350,

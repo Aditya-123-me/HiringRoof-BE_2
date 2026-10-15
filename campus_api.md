@@ -15,7 +15,7 @@ All endpoints are mounted under Express router prefix:
 ## 1. College & University Management
 
 ### 1.1 Register College
-Register a new college/university and its placement cell officer.
+Register a new college/university and its placement officer TPO.
 * **Method:** `POST`
 * **URL:** `/campus/colleges/register` (or `/campus/colleges`)
 * **Request Body (JSON):**
@@ -142,7 +142,7 @@ Register a new college/university and its placement cell officer.
   "phone": "+91 98765 11111",
   "collegeName": "Delhi Technological University (DTU)",
   "university": "DTU",
-  "rollNo": "2K22/CO/042",
+  "rollNo": "2022/BCST/042",
   "course": "B.Tech",
   "department": "Computer Engineering",
   "graduationYear": 2025,
