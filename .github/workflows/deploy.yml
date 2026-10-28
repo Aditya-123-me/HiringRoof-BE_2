@@ -1,51 +1,31 @@
-name: Deploy HiringRoof Backend
+name: Deploy Backend
 
 on:
   push:
     branches:
-      - anubhaw
+      - Deploy
 
 jobs:
   deploy:
-    name: Build & Deploy Backend
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup SSH Key
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          node-version: 22
-
-      - name: Install Dependencies
-        run: npm install
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Deploy to Server via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          password: ${{ secrets.SERVER_PASSWORD }}
-          port: ${{ secrets.SERVER_PORT || 22 }}
-          script: |
-            set -e
-            echo "🚀 Deploying Backend (anubhaw branch) to /var/www/html/hiringroof-backend..."
-            git config --global --add safe.directory /var/www/html/hiringroof-backend || true
-            mkdir -p /var/www/html/hiringroof-backend
-            cd /var/www/html/hiringroof-backend
-            if [ ! -d ".git" ]; then
-              echo "Initializing git repository on server..."
-              git init
-            fi
-            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Aditya-123-me/HiringRoof-BE_2.git || git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/Aditya-123-me/HiringRoof-BE_2.git
-            git fetch origin anubhaw
-            git reset --hard origin/anubhaw
-            git checkout -B anubhaw origin/anubhaw
-            git pull origin anubhaw
-            npm install --omit=dev
-            pm2 delete hiringroof-backend hiringroof-backend-new || true
-            pm2 start index.js -i max --name "hiringroof-backend"
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no $SSH_USER@$SERVER_IP << 'EOF'
+            cd /var/www/common/hr/be
+            git pull origin Deploy
+            npm install
+            pm2 restart hiringroof-be || pm2 start server.js --name "hiringroof-be"
             pm2 save
-            echo "✅ Backend Deployment Complete!"
+          EOF
